@@ -23,8 +23,23 @@ import { outputMonitor } from '../claude-code/output-monitor';
 import type { AgentManager } from '../agent/agent-manager';
 import { readSettingsFile } from '../settings-utils';
 import { getUsageMonitor } from '../claude-profile/usage-monitor';
+import { isLinux } from '../platform';
 
 const MANUAL_RDR_TEST_PROMPT = 'Aperant test prompt: manual RDR connection check.';
+
+/**
+ * Select the best default mechanism for the current platform.
+ */
+function getPlatformDefaultMechanismId(mechanisms: Array<{ id: string; name: string; template: string; isDefault?: boolean }>): string | undefined {
+  if (isLinux()) {
+    const linuxMech = mechanisms.find((m) => m.id === 'linux-native-cdp-vscode');
+    if (linuxMech) return linuxMech.id;
+  }
+  // Windows or fallback
+  const winMech = mechanisms.find((m) => m.id === 'windows-claude-code-vscode');
+  if (winMech) return winMech.id;
+  return mechanisms[0]?.id;
+}
 
 async function sendMessageWithActiveRdrMechanism(
   identifier: number | string,
@@ -34,18 +49,33 @@ async function sendMessageWithActiveRdrMechanism(
   const { DEFAULT_RDR_MECHANISMS } = await import('../../shared/constants/config');
 
   const mechanisms = settings.rdrMechanisms || DEFAULT_RDR_MECHANISMS;
-  const activeMechanismId = settings.activeMechanismId || mechanisms[0]?.id;
-  const activeMechanism = mechanisms.find((mechanism) => mechanism.id === activeMechanismId) || mechanisms[0];
+
+  // Platform-aware default selection: if no mechanism is explicitly chosen,
+  // pick the one matching the current OS.
+  const activeMechanismId = settings.activeMechanismId || getPlatformDefaultMechanismId(mechanisms);
+  let activeMechanism = mechanisms.find((mechanism) => mechanism.id === activeMechanismId) || mechanisms[0];
 
   if (activeMechanism) {
     console.log(`[RDR] Using mechanism: "${activeMechanism.name}"`);
-    console.log(`[RDR] Template: ${activeMechanism.template}`);
+    console.log(`[RDR] Template: ${activeMechanism.template || '(native platform)'}`);
   } else {
     console.error('[RDR] No RDR mechanism found, using default');
   }
 
   const { sendRdrMessage } = await import('../platform/rdr-message-sender');
-  return sendRdrMessage(identifier, message, activeMechanism?.template);
+  const result = await sendRdrMessage(identifier, message, activeMechanism?.template);
+
+  // On Linux, if the active mechanism failed and it's NOT the native one,
+  // automatically retry with the Linux native mechanism.
+  if (!result.success && isLinux() && activeMechanism?.id !== 'linux-native-cdp-vscode') {
+    const linuxMech = mechanisms.find((m) => m.id === 'linux-native-cdp-vscode');
+    if (linuxMech) {
+      console.log('[RDR] Retrying with Linux native CDP mechanism');
+      return sendRdrMessage(identifier, message, linuxMech.template);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -2421,17 +2451,27 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
       console.log('[RDR] Getting VS Code windows');
 
       try {
+        if (isLinux()) {
+          const { getVSCodeWindows } = await import('../platform/linux/window-manager');
+          const windows = await getVSCodeWindows();
+          console.log(`[RDR] Found ${windows.length} VS Code: windows on Linux`);
+          return {
+            success: true,
+            data: windows.map((w) => ({ handle: w.handle, title: w.title, processId: w.processId }))
+          };
+        }
+
         // Dynamic import to avoid loading Windows-specific code on other platforms
         const { getVSCodeWindows } = await import('../platform/windows/window-manager');
         const windows = getVSCodeWindows();
-        console.log(`[RDR] Found ${windows.length} VS Code windows`);
+        console.log(`[RDR] Found ${windows.length} VS Code: windows`);
 
         return {
           success: true,
           data: windows
         };
       } catch (error) {
-        console.error('[RDR] Failed to get VS Code windows:', error);
+        console.error('[RDR] Failed to get VS Code: windows:', error);
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error)
@@ -2792,6 +2832,12 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
     IPC_CHANNELS.IS_CLAUDE_CODE_BUSY,
     async (event, identifier: number | string): Promise<IPCResult<boolean>> => {
       try {
+        if (isLinux()) {
+          const { isClaudeCodeBusy } = await import('../platform/linux/window-manager');
+          const busy = await isClaudeCodeBusy(identifier);
+          return { success: true, data: busy };
+        }
+
         const { isClaudeCodeBusy } = await import('../platform/windows/window-manager');
         const busy = await isClaudeCodeBusy(identifier);
         return { success: true, data: busy };

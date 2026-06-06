@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { exec } from 'child_process';
-import { isWindows } from './index';
+import { isWindows, isLinux } from './index';
 import { getWindowsSafeTempDir, runWindowsPowerShell } from './windows/powershell-runner';
 
 export interface SendMessageResult {
@@ -187,19 +187,35 @@ async function sendWithPlatformDefault(
     // Use Windows PowerShell clipboard method (existing implementation)
     const { sendMessageToWindow } = await import('./windows/window-manager');
     return sendMessageToWindow(identifier, message);
-  } else {
-    // Unix (macOS/Linux): Try ccli first, then fall back to file-based
-    const template = 'ccli --message "$(cat \'{{messagePath}}\')"';
-    const command = substituteVariables(template, {
-      message: escapeForShell(message),
-      messagePath,
-      identifier: identifier.toString(),
-      scriptPath: ''
-    });
-
-    console.log('[RDR Sender] Unix default: ccli command');
-    return executeCommand(command);
   }
+
+  if (isLinux()) {
+    // Linux native: CDP → foreground clipboard → ccli fallback
+    console.log('[RDR Sender] Linux native: trying CDP and foreground methods');
+    try {
+      const { sendMessageToWindow: sendLinux } = await import('./linux/window-manager');
+      const result = await sendLinux(identifier, message);
+      if (result.success) {
+        return result;
+      }
+      console.warn('[RDR Sender] Linux native failed:', result.error);
+    } catch (err) {
+      console.error('[RDR Sender] Linux native error:', err);
+    }
+    // Fall through to ccli fallback
+  }
+
+  // Unix fallback (macOS or Linux when native fails): ccli
+  const template = 'ccli --message "$(cat \'{{messagePath}}\')"';
+  const command = substituteVariables(template, {
+    message: escapeForShell(message),
+    messagePath,
+    identifier: identifier.toString(),
+    scriptPath: ''
+  });
+
+  console.log('[RDR Sender] Unix fallback: ccli command');
+  return executeCommand(command);
 }
 
 /**

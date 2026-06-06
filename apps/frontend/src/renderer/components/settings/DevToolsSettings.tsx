@@ -630,15 +630,33 @@ export function DevToolsSettings({ settings, onSettingsChange }: DevToolsSetting
               </div>
 
               {/* Template editor - full width and resizable */}
-              <div className="px-4">
-                <Textarea
-                  className="w-full resize-y font-mono text-xs"
-                  rows={6}
-                  value={selectedMechanism?.template || ''}
-                  onChange={(e) => handleUpdateTemplate(e.target.value)}
-                  placeholder={t('devtools.rdrMechanisms.templatePlaceholder', 'e.g., ccli --message "$(cat \'{{messagePath}}\')"')}
-                />
-              </div>
+              {/* Linux native mechanism shows a status panel instead of an empty textarea */}
+              {selectedMechanism?.id === 'linux-native-cdp-vscode' ? (
+                <div className="px-4">
+                  <div className="flex items-start gap-2 p-3 border border-green-500/50 bg-green-500/10 rounded-md">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                        Linux Native CDP Active
+                      </p>
+                      <p className="text-xs text-green-600/80 dark:text-green-400/80">
+                        Prompts are sent directly via Chrome DevTools Protocol (CDP) to VS Code: extensions.
+                        No custom script needed. Fallback: foreground clipboard simulation (xdotool/xclip or kdotool/wl-copy).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-4">
+                  <Textarea
+                    className="w-full resize-y font-mono text-xs"
+                    rows={6}
+                    value={selectedMechanism?.template || ''}
+                    onChange={(e) => handleUpdateTemplate(e.target.value)}
+                    placeholder={t('devtools.rdrMechanisms.templatePlaceholder', 'e.g., ccli --message "$(cat \'{{messagePath}}\')"')}
+                  />
+                </div>
+              )}
 
               {/* Template validation warning */}
               {(() => {

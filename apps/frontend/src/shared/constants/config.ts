@@ -202,6 +202,15 @@ if ($original -ne [IntPtr]::Zero -and $original -ne [IntPtr]$Handle) {
 
 Write-Output "Message sent successfully"`,
     isDefault: true
+  },
+  {
+    id: 'linux-native-cdp-vscode',
+    name: 'Linux Native CDP for VS Code: (Auto-detect)',
+    // Empty template signals native platform behavior.
+    // sendRdrMessage falls through to sendWithPlatformDefault(),
+    // which on Linux tries CDP → foreground clipboard → ccli fallback.
+    template: '',
+    isDefault: true
   }
 ];
 
