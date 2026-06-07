@@ -38,8 +38,7 @@ import {
 import { projectStore } from '../project-store.js';
 import { readAndClearSignalFile, categorizeTasks, enrichTaskWithWorktreeData } from '../ipc-handlers/rdr-handlers.js';
 import { DEFAULT_APP_SETTINGS } from '../../shared/constants/index.js';
-import { getWindowVirtualDesktopInfo } from '../platform/windows/virtual-desktop.js';
-import { getVSCodeWindows } from '../platform/windows/window-manager.js';
+import { isLinux } from '../platform/index.js';
 import {
   appendProjectAutomationSignal,
   applyProjectAutomationToggle,
@@ -238,8 +237,24 @@ function getDesktopAssociationSignalPath(): string {
   return join(getAppDataDir(), 'desktop-project-association-signal.json');
 }
 
-function listCodeWindows(): CodeWindow[] {
+async function listCodeWindows(): Promise<CodeWindow[]> {
+  if (isLinux()) {
+    const { getVSCodeWindows } = await import('../platform/linux/window-manager.js');
+    const windows = await getVSCodeWindows();
+    return windows.map((w) => ({ handle: w.handle, title: w.title, processId: w.processId }));
+  }
+  const { getVSCodeWindows } = await import('../platform/windows/window-manager.js');
   return getVSCodeWindows();
+}
+
+async function getWindowVirtualDesktopInfoForHandle(handle: number) {
+  if (isLinux()) {
+    // Linux virtual desktop support is available via kdotool/qdbus but not yet
+    // wired into the standalone MCP server. Return a synthetic assignment.
+    return { id: String(handle), number: null, name: 'Linux Desktop', visible: true };
+  }
+  const { getWindowVirtualDesktopInfo } = await import('../platform/windows/virtual-desktop.js');
+  return getWindowVirtualDesktopInfo(handle);
 }
 
 function matchCodeWindow(
@@ -388,7 +403,7 @@ server.tool(
   },
   withMonitoring('assign_window', async ({ projectId, projectPath, windowTitle }) => {
     try {
-      const windows = listCodeWindows();
+      const windows = await listCodeWindows();
 
       if (windows.length === 0) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No VS Code windows found' }) }] };
@@ -471,7 +486,7 @@ server.tool(
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Project not found and no valid projectPath was provided.' }) }] };
       }
 
-      const windows = listCodeWindows();
+      const windows = await listCodeWindows();
       if (windows.length === 0) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'No VS Code windows found' }) }] };
       }
@@ -485,7 +500,7 @@ server.tool(
         }, null, 2) }] };
       }
 
-      const desktopInfo = getWindowVirtualDesktopInfo(matchedWindow.handle);
+      const desktopInfo = await getWindowVirtualDesktopInfoForHandle(matchedWindow.handle);
       if (!desktopInfo?.id) {
         return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Could not resolve the virtual desktop for the selected VS Code window.' }) }] };
       }
