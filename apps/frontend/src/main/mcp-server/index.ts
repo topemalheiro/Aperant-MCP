@@ -204,13 +204,13 @@ function withMonitoring<T extends (...args: any[]) => Promise<any>>(
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CodeWindow = {
-  handle: number;
+  handle: number | string;
   title: string;
   processId: number;
 };
 
 type WindowAssignment = {
-  handle?: number;
+  handle?: number | string;
   processId: number;
   title: string;
   provider: string;
@@ -247,14 +247,14 @@ async function listCodeWindows(): Promise<CodeWindow[]> {
   return getVSCodeWindows();
 }
 
-async function getWindowVirtualDesktopInfoForHandle(handle: number) {
+async function getWindowVirtualDesktopInfoForHandle(handle: number | string) {
   if (isLinux()) {
     // Linux virtual desktop support is available via kdotool/qdbus but not yet
     // wired into the standalone MCP server. Return a synthetic assignment.
     return { id: String(handle), number: null, name: 'Linux Desktop', visible: true };
   }
   const { getWindowVirtualDesktopInfo } = await import('../platform/windows/virtual-desktop.js');
-  return getWindowVirtualDesktopInfo(handle);
+  return getWindowVirtualDesktopInfo(handle as number);
 }
 
 function matchCodeWindow(

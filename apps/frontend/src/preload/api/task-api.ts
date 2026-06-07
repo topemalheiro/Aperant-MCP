@@ -42,7 +42,7 @@ export interface RdrBatchDetails {
 }
 
 export interface AssignedWindow {
-  handle?: number;
+  handle?: number | string;
   processId: number;
   title: string;
   provider?: string;
@@ -148,7 +148,7 @@ export interface TaskAPI {
   autoRecoverAllTasks: (projectId: string) => Promise<IPCResult<{ recovered: number; taskIds: string[] }>>;
 
   // VS Code Window Management (for RDR message sending)
-  getVSCodeWindows: () => Promise<IPCResult<Array<{ handle: number; title: string; processId: number }>>>;
+  getVSCodeWindows: () => Promise<IPCResult<Array<{ handle: number | string; title: string; processId: number }>>>;
   sendRdrToWindow: (identifier: number | string, message: string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
   sendTestRdrToWindow: (identifier: number | string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
 
@@ -533,7 +533,7 @@ export const createTaskAPI = (): TaskAPI => ({
   getAssignedWindow: (projectId: string): Promise<IPCResult<AssignedWindow | null>> =>
     ipcRenderer.invoke(IPC_CHANNELS.RDR_GET_ASSIGNED_WINDOW, projectId),
 
-  setAssignedWindow: (projectId: string, window: { handle: number; processId: number; title: string }): Promise<IPCResult<AssignedWindow>> =>
+  setAssignedWindow: (projectId: string, window: { handle: number | string; processId: number; title: string }): Promise<IPCResult<AssignedWindow>> =>
     ipcRenderer.invoke(IPC_CHANNELS.RDR_SET_ASSIGNED_WINDOW, projectId, window),
 
   // Detailed RDR batch info for auto-send

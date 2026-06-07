@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Aperant-MCP
+Comment=Autonomous multi-agent coding framework with crash recovery
+Exec=@@INSTALL_DIR@@/aperant
+Icon=@@ICON_PATH@@
+Type=Application
+Terminal=true
+Categories=Development;
+Keywords=codex;ai;agent;coding;autonomous;
+StartupNotify=true
+StartupWMClass=Aperant-MCP

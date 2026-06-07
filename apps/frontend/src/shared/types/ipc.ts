@@ -261,7 +261,7 @@ export interface ElectronAPI {
   // RDR (Recover Debug Resend) operations
   triggerRdrProcessing: (projectId: string, taskIds: string[]) => Promise<IPCResult<{ processed: number }>>;
   pingRdrImmediate: (projectId: string, tasks: Task[]) => Promise<IPCResult<{ taskCount: number; signalPath: string }>>;
-  getVSCodeWindows: () => Promise<IPCResult<Array<{ handle: number; title: string; processId: number }>>>;
+  getVSCodeWindows: () => Promise<IPCResult<Array<{ handle: number | string; title: string; processId: number }>>>;
   sendRdrToWindow: (identifier: number | string, message: string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
   sendTestRdrToWindow: (identifier: number | string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
   getRdrBatchDetails: (projectId: string) => Promise<IPCResult<{

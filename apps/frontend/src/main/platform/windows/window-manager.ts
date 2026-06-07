@@ -17,7 +17,7 @@ import { getWindowsSafeTempDir, runWindowsPowerShell, runWindowsPowerShellSync }
  * Represents a VS Code window
  */
 export interface VSCodeWindow {
-  handle: number;
+  handle: number | string;
   title: string;
   processId: number;
 }
@@ -414,7 +414,7 @@ export function findWindowByTitle(pattern: string): VSCodeWindow | undefined {
  * @param handle - Native window handle returned by getVSCodeWindows()
  * @returns Matching window or undefined
  */
-export function findWindowByHandle(handle: number): VSCodeWindow | undefined {
+export function findWindowByHandle(handle: number | string): VSCodeWindow | undefined {
   const windows = getVSCodeWindows();
   return windows.find((w) => w.handle === handle);
 }
@@ -458,7 +458,7 @@ export function findWindow(identifier: number | string): VSCodeWindow | undefine
  * @param handle - Window handle to check
  * @returns true if window still exists
  */
-export function isWindowValid(handle: number): boolean {
+export function isWindowValid(handle: number | string): boolean {
   const windows = getVSCodeWindows();
   return windows.some((w) => w.handle === handle);
 }

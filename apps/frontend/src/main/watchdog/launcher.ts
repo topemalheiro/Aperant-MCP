@@ -16,6 +16,11 @@ import { crashNotifier } from './crash-notifier';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Prevent parent Electron processes (e.g. VS Code) from breaking child Electron.
+// If ELECTRON_RUN_AS_NODE leaks into the environment, spawned Electron binaries
+// run as plain Node.js and fail to expose BrowserWindow, app, etc.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 // Parse command line arguments
 const args = process.argv.slice(2);
 const electronPath = args[0] || process.execPath; // Default to current Node.js if not specified

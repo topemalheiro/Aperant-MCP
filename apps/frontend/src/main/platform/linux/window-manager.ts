@@ -25,7 +25,8 @@ import {
  * Represents a VS Code: window on Linux
  */
 export interface VSCodeWindow {
-  handle: number;
+  /** Native window handle: numeric on X11/Windows, kdotool UUID string on Wayland */
+  handle: number | string;
   title: string;
   processId: number;
   processName?: string;
@@ -48,9 +49,12 @@ export interface SendMessageResult {
 }
 
 const EDITOR_TITLE_SUBSTRINGS = [
-  'Visual Studio Code:',
-  'Kilo Code:',
-  'Kimi Code:',
+  // IMPORTANT: do NOT include trailing colons here. kdotool's --title matching and
+  // many real VS Code: window titles end with "Visual Studio Code" (no colon).
+  // Reprompty uses the same colon-less substrings.
+  'Visual Studio Code',
+  'Kilo Code',
+  'Kimi Code',
   'VSCodium',
   'Code: - OSS'
 ];
@@ -95,7 +99,7 @@ function isSupportedEditorProcessName(name?: string | null): boolean {
 }
 
 function fallbackProcessNameFromTitle(title: string): string {
-  return title.includes('Kilo Code:') || title.includes('Kimi Code:') ? 'kilocode' : 'code';
+  return title.includes('Kilo Code') || title.includes('Kimi Code') ? 'kilocode' : 'code';
 }
 
 function getWritableTempDir(): string {
@@ -163,17 +167,19 @@ function listWindowsKdotool(): Array<{
   const results: Array<{ pid: number; title: string; processName: string; handle: string }> = [];
   const seenHandles = new Set<string>();
 
+  console.log(`[LinuxWindowManager] listWindowsKdotool() using ${kdotoolPath}`);
+
   for (const term of EDITOR_TITLE_SUBSTRINGS) {
     try {
-      const output = execSync(
-        `"${kdotoolPath}" search --title ${JSON.stringify(term)} --limit 0`,
-        { encoding: 'utf-8', timeout: 5000 }
-      ).trim();
-
+      const cmd = `"${kdotoolPath}" search --title ${JSON.stringify(term)} --limit 0`;
+      console.log(`[LinuxWindowManager] kdotool cmd: ${cmd}`);
+      const output = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim();
       const lines = output
         .split('\n')
         .map((l) => l.trim())
         .filter((l) => l.startsWith('{'));
+      console.log(`[LinuxWindowManager] kdotool term "${term}" => ${lines.length} handles`);
+
       for (const handleStr of lines) {
         try {
           if (seenHandles.has(handleStr)) {
@@ -186,7 +192,12 @@ function listWindowsKdotool(): Array<{
             timeout: 2000
           }).trim();
 
-          if (!title || !isEditorWindowTitle(title)) {
+          if (!title) {
+            console.log(`[LinuxWindowManager] kdotool ${handleStr}: empty title, skipping`);
+            continue;
+          }
+          if (!isEditorWindowTitle(title)) {
+            console.log(`[LinuxWindowManager] kdotool ${handleStr}: title "${title}" does not match editor substrings, skipping`);
             continue;
           }
 
@@ -197,7 +208,8 @@ function listWindowsKdotool(): Array<{
               timeout: 2000
             }).trim();
             pid = parseInt(pidStr, 10);
-          } catch {
+          } catch (err) {
+            console.warn(`[LinuxWindowManager] kdotool getwindowpid ${handleStr} failed:`, err instanceof Error ? err.message : String(err));
             pid = 0;
           }
 
@@ -208,26 +220,30 @@ function listWindowsKdotool(): Array<{
                 encoding: 'utf-8',
                 timeout: 2000
               }).trim();
-            } catch {
+            } catch (err) {
+              console.warn(`[LinuxWindowManager] ps -p ${pid} failed:`, err instanceof Error ? err.message : String(err));
               processName = '';
             }
           }
 
           if (!processName) {
             processName = fallbackProcessNameFromTitle(title);
+            console.log(`[LinuxWindowManager] kdotool ${handleStr}: fallback processName from title => ${processName}`);
           }
 
           if (!isSupportedEditorProcessName(processName)) {
+            console.log(`[LinuxWindowManager] kdotool ${handleStr}: unsupported processName "${processName}", skipping`);
             continue;
           }
 
+          console.log(`[LinuxWindowManager] kdotool found: "${title}" pid=${pid} processName=${processName}`);
           results.push({ pid, title, processName, handle: handleStr });
-        } catch {
-          // skip individual window errors
+        } catch (err) {
+          console.warn(`[LinuxWindowManager] kdotool window ${handleStr} error:`, err instanceof Error ? err.message : String(err));
         }
       }
-    } catch {
-      // search term failed
+    } catch (err) {
+      console.warn(`[LinuxWindowManager] kdotool search term "${term}" failed:`, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -279,6 +295,8 @@ function listEditorProcesses(): Array<{ pid: number; processName: string; title:
       .filter(Boolean);
     const seenPids = new Set<number>();
 
+    console.log(`[LinuxWindowManager] listEditorProcesses scanning ${lines.length} ps lines`);
+
     for (const line of lines) {
       const match = line.match(/^\s*(\d+)\s+(\S+)\s+(.*)$/);
       if (!match) continue;
@@ -304,6 +322,12 @@ function listEditorProcesses(): Array<{ pid: number; processName: string; title:
         continue;
       }
 
+      // Skip extension host / language server processes (they are not user windows)
+      if (args.includes('--node-ipc') || args.includes('extensions/')) {
+        console.log(`[LinuxWindowManager] ps pid=${pid} skipped: extension/language server process`);
+        continue;
+      }
+
       // Extract folder path from args if available
       let folderPath = '';
       const folderMatch = args.match(/\s+(-n|--new-window)\s+"?([^"]+)"?/);
@@ -321,6 +345,7 @@ function listEditorProcesses(): Array<{ pid: number; processName: string; title:
         : 'Visual Studio Code:';
 
       seenPids.add(pid);
+      console.log(`[LinuxWindowManager] ps found: "${displayTitle}" pid=${pid} comm=${comm}`);
       results.push({
         pid,
         processName: normalizedComm,
@@ -331,6 +356,7 @@ function listEditorProcesses(): Array<{ pid: number; processName: string; title:
     console.error('[LinuxWindowManager] listEditorProcesses error:', err);
   }
 
+  console.log(`[LinuxWindowManager] listEditorProcesses returning ${results.length} results`);
   return results;
 }
 
@@ -401,14 +427,26 @@ export function getCdpPort(): number | null {
  */
 export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
   const windows: VSCodeWindow[] = [];
+
+  console.log('[LinuxWindowManager] getVSCodeWindows() start');
+  console.log('[LinuxWindowManager] env:', {
+    PATH: process.env.PATH,
+    DISPLAY: process.env.DISPLAY,
+    WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY,
+    XDG_SESSION_TYPE: process.env.XDG_SESSION_TYPE,
+    HOME: process.env.HOME
+  });
+
   const cdpPort = getCdpPort();
+  console.log('[LinuxWindowManager] CDP port:', cdpPort);
   let agentStates: import('./linux-cdp-client').WindowAgentState[] = [];
 
   if (cdpPort) {
     try {
       agentStates = await getWindowAgentStates(cdpPort);
-    } catch {
-      // CDP not available, continue without agent detection
+      console.log('[LinuxWindowManager] CDP agent states:', agentStates.length);
+    } catch (err) {
+      console.warn('[LinuxWindowManager] CDP agent detection failed:', err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -419,6 +457,8 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
+
+    console.log(`[LinuxWindowManager] wmctrl returned ${lines.length} lines`);
 
     for (const line of lines) {
       const parts = line.split(/\s+/);
@@ -436,11 +476,14 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
           encoding: 'utf-8',
           timeout: 2000
         }).trim();
-      } catch {
-        processName = '';
+      } catch (err) {
+        console.warn(`[LinuxWindowManager] ps -p ${pid} failed:`, err instanceof Error ? err.message : String(err));
       }
 
-      if (processName && !isSupportedEditorProcessName(processName)) continue;
+      if (processName && !isSupportedEditorProcessName(processName)) {
+        console.log(`[LinuxWindowManager] wmctrl window skipped (unsupported processName): "${title}" pid=${pid} processName=${processName}`);
+        continue;
+      }
 
       const resolvedName = processName || fallbackProcessNameFromTitle(title);
       const agentState = findWindowAgentState(agentStates, title);
@@ -455,16 +498,22 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
         availableAgents: agentState?.availableAgents
       });
     }
-  } catch {
-    // wmctrl failed — likely on Wayland or not installed
+  } catch (err) {
+    console.warn('[LinuxWindowManager] wmctrl failed:', err instanceof Error ? err.message : String(err));
   }
+
+  console.log(`[LinuxWindowManager] After wmctrl: ${windows.length} windows`);
 
   // Tier 2: KDE Wayland via kdotool
   if (windows.length === 0 && hasKdotool()) {
-    for (const win of listWindowsKdotool()) {
+    console.log('[LinuxWindowManager] Falling back to kdotool...');
+    const kdotoolWindows = listWindowsKdotool();
+    console.log(`[LinuxWindowManager] kdotool returned ${kdotoolWindows.length} windows`);
+    for (const win of kdotoolWindows) {
       const agentState = findWindowAgentState(agentStates, win.title);
       windows.push({
-        handle: win.pid, // Use PID as surrogate handle on Wayland
+        // On Wayland the kdotool UUID is the real unique handle; PID is shared across tabs.
+        handle: win.handle,
         title: win.title,
         processId: win.pid,
         processName: win.processName,
@@ -474,11 +523,18 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
         availableAgents: agentState?.availableAgents
       });
     }
+  } else if (windows.length === 0) {
+    console.log('[LinuxWindowManager] kdotool not available (hasKdotool=false)');
   }
+
+  console.log(`[LinuxWindowManager] After kdotool: ${windows.length} windows`);
 
   // Tier 3: Process fallback for Wayland
   if (windows.length === 0 && isWaylandSession()) {
-    for (const proc of listEditorProcesses()) {
+    console.log('[LinuxWindowManager] Falling back to process listing...');
+    const procWindows = listEditorProcesses();
+    console.log(`[LinuxWindowManager] process listing returned ${procWindows.length} windows`);
+    for (const proc of procWindows) {
       const agentState = findWindowAgentState(agentStates, proc.title);
       windows.push({
         handle: proc.pid,
@@ -492,6 +548,7 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
     }
   }
 
+  console.log(`[LinuxWindowManager] Returning ${windows.length} windows`);
   return windows;
 }
 
@@ -501,9 +558,9 @@ export function findWindowByTitle(pattern: string): VSCodeWindow | undefined {
   return windows.find((w) => w.title.toLowerCase().includes(lowerPattern));
 }
 
-export function findWindowByHandle(handle: number): VSCodeWindow | undefined {
+export function findWindowByHandle(handle: number | string): VSCodeWindow | undefined {
   const windows = getVSCodeWindowsSync();
-  return windows.find((w) => w.handle === handle);
+  return windows.find((w) => w.handle === handle || w.kdotoolHandle === handle);
 }
 
 export function findWindowByProcessId(pid: number): VSCodeWindow | undefined {
@@ -518,9 +575,9 @@ export function findWindow(identifier: number | string): VSCodeWindow | undefine
   return findWindowByTitle(identifier);
 }
 
-export function isWindowValid(handle: number): boolean {
+export function isWindowValid(handle: number | string): boolean {
   const windows = getVSCodeWindowsSync();
-  return windows.some((w) => w.handle === handle);
+  return windows.some((w) => w.handle === handle || w.kdotoolHandle === handle);
 }
 
 // Synchronous version for findWindow* helpers (uses cached results or simple detection)
@@ -559,7 +616,7 @@ function getVSCodeWindowsSync(): VSCodeWindow[] {
   if (windows.length === 0 && hasKdotool()) {
     for (const win of listWindowsKdotool()) {
       windows.push({
-        handle: win.pid,
+        handle: win.handle,
         title: win.title,
         processId: win.pid,
         processName: win.processName,

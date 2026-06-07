@@ -1727,7 +1727,7 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   const rdrEnabled = currentProject?.settings?.rdrEnabled ?? false;
 
   type AssignedWindow = {
-    handle?: number;
+    handle?: number | string;
     processId: number;
     title: string;
     provider?: string;
@@ -1735,11 +1735,11 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   };
 
   // VS Code window state for RDR direct sending
-  const [vsCodeWindows, setVsCodeWindows] = useState<Array<{ handle: number; title: string; processId: number }>>([]);
+  const [vsCodeWindows, setVsCodeWindows] = useState<Array<{ handle: number | string; title: string; processId: number }>>([]);
   // Per-project window selection � each project tab has its own RDR target window
-  const perProjectWindowRef = useRef<Map<string, number>>(new Map());
+  const perProjectWindowRef = useRef<Map<string, number | string>>(new Map());
   const selectedWindowPid = projectId ? (perProjectWindowRef.current.get(projectId) ?? null) : null;
-  const setSelectedWindowPid = (handle: number | null) => {
+  const setSelectedWindowPid = (handle: number | string | null) => {
     if (projectId && handle !== null) {
       perProjectWindowRef.current.set(projectId, handle);
     } else if (projectId) {
@@ -1749,14 +1749,14 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
     setWindowSelectionTick(t => t + 1);
   };
   const [, setWindowSelectionTick] = useState(0);
-  const selectedWindowPidRef = useRef<number | null>(null);
+  const selectedWindowPidRef = useRef<number | string | null>(null);
   selectedWindowPidRef.current = selectedWindowPid;
   const [isLoadingWindows, setIsLoadingWindows] = useState(false);
 
   const resolveAssignedWindowHandle = useCallback((
-    windows: Array<{ handle: number; title: string; processId: number }>,
+    windows: Array<{ handle: number | string; title: string; processId: number }>,
     assignedWindow?: AssignedWindow | null,
-  ): number | null => {
+  ): number | string | null => {
     if (!assignedWindow || windows.length === 0) {
       return null;
     }
@@ -1787,7 +1787,7 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
     return null;
   }, []);
 
-  const persistSelectedWindow = useCallback(async (handle: number | null) => {
+  const persistSelectedWindow = useCallback(async (handle: number | string | null) => {
     if (!projectId || handle === null) {
       return;
     }
@@ -1809,7 +1809,9 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   }, [projectId, vsCodeWindows]);
 
   const handleWindowSelectionChange = useCallback((value: string) => {
-    const handle = value ? parseInt(value, 10) : null;
+    // Value may be a numeric handle or a kdotool UUID string on Linux Wayland.
+    // Don't parseInt UUIDs — preserve them as strings.
+    const handle = value || null;
     setSelectedWindowPid(handle);
     void persistSelectedWindow(handle);
   }, [persistSelectedWindow]);

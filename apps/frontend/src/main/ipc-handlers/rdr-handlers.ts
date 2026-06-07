@@ -2447,11 +2447,13 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
   // Get list of VS Code windows
   ipcMain.handle(
     IPC_CHANNELS.GET_VSCODE_WINDOWS,
-    async (): Promise<IPCResult<Array<{ handle: number; title: string; processId: number }>>> => {
+    async (): Promise<IPCResult<Array<{ handle: number | string; title: string; processId: number }>>> => {
       console.log('[RDR] Getting VS Code windows');
+      console.log(`[RDR] isLinux()=${isLinux()} process.platform=${process.platform}`);
 
       try {
         if (isLinux()) {
+          console.log('[RDR] Taking Linux platform branch');
           const { getVSCodeWindows } = await import('../platform/linux/window-manager');
           const windows = await getVSCodeWindows();
           console.log(`[RDR] Found ${windows.length} VS Code: windows on Linux`);
@@ -2462,6 +2464,7 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
         }
 
         // Dynamic import to avoid loading Windows-specific code on other platforms
+        console.log('[RDR] Taking Windows platform branch');
         const { getVSCodeWindows } = await import('../platform/windows/window-manager');
         const windows = getVSCodeWindows();
         console.log(`[RDR] Found ${windows.length} VS Code: windows`);

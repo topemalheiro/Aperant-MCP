@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+#
+# Aperant-MCP Linux Launcher
+# Spawns the external watchdog with Aperant as a child process.
+# Use this to launch Aperant from your taskbar/dock with crash recovery enabled.
+#
+# Usage:
+#   aperant              Launch in development mode (with watchdog)
+#   aperant --packaged   Launch the packaged build (with watchdog)
+#   aperant --direct     Launch directly without watchdog (for debugging)
+#
+
+set -euo pipefail
+
+# ── Prevent VS Code (or other Electron apps) from breaking child Electron ─────
+# If ELECTRON_RUN_AS_NODE is inherited from a parent Electron process (e.g. VS
+# Code), any Electron binary we spawn will run as plain Node.js and fail to
+# expose BrowserWindow, app, etc. This causes the cryptic "cannot execute
+# binary file" / "does not provide an export named 'BrowserWindow'" errors.
+unset ELECTRON_RUN_AS_NODE 2>/dev/null || true
+
+# ── Ensure Node.js tooling is available ───────────────────────────────────────
+# When launched from a .desktop file, the shell environment (nvm, fnm, etc.)
+# is not sourced. We try common locations and profiles.
+if [[ -z "${NODE_PATH_SET:-}" ]]; then
+  # Try to load user's shell profile for nvm/fnm
+  for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile"; do
+    if [[ -f "$profile" ]]; then
+      # shellcheck source=/dev/null
+      source "$profile" 2>/dev/null || true
+    fi
+  done
+
+  # Add common Node installation directories to PATH
+  for node_dir in "$HOME/.local/node/bin" "$HOME/.nvm/versions/node/*/bin" "$HOME/.fnm/node-versions/*/installation/bin" "/usr/local/bin" "/opt/node/bin"; do
+    for resolved in $node_dir; do
+      if [[ -d "$resolved" && ":$PATH:" != *":$resolved:"* ]]; then
+        PATH="$resolved:$PATH"
+      fi
+    done
+  done
+
+  export PATH
+  export NODE_PATH_SET=1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# ── Detect mode ───────────────────────────────────────────────────────────────
+MODE="dev"
+if [[ "${1:-}" == "--packaged" ]]; then
+  MODE="packaged"
+fi
+if [[ "${1:-}" == "--direct" ]]; then
+  MODE="direct"
+fi
+
+# ── Resolve paths ─────────────────────────────────────────────────────────────
+FRONTEND_DIR="$REPO_DIR/apps/frontend"
+WATCHDOG_LAUNCHER="$FRONTEND_DIR/src/main/watchdog/launcher.ts"
+
+# Icon for notification / window managers that read WM_CLASS from startup
+export APP_ICON="$FRONTEND_DIR/resources/icon-256.png"
+
+# ── Validate repo ─────────────────────────────────────────────────────────────
+if [[ ! -f "$FRONTEND_DIR/package.json" ]]; then
+  echo "[aperant] ERROR: Could not find Aperant-MCP repository."
+  echo "[aperant] Expected: $FRONTEND_DIR/package.json"
+  echo "[aperant] Make sure this script is inside the repository at scripts/linux/."
+  exit 1
+fi
+
+# ── Launch helpers ────────────────────────────────────────────────────────────
+launch_dev_watchdog() {
+  echo "[aperant] Starting Aperant-MCP in DEVELOPMENT mode with watchdog..."
+  cd "$FRONTEND_DIR"
+
+  # Check node_modules exists
+  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    echo "[aperant] ERROR: node_modules not found. Run 'npm run install:all' from the repo root first."
+    exit 1
+  fi
+
+  # The dev:watchdog script uses tsx to run the TypeScript launcher
+  exec npm run dev:watchdog
+}
+
+launch_packaged_watchdog() {
+  local packaged_dir="$REPO_DIR/apps/frontend/dist/linux-unpacked"
+  local electron_bin="$packaged_dir/auto-claude"
+  local app_main="$packaged_dir/resources/app/out/main/index.js"
+
+  # Fallback: try common packaged locations
+  if [[ ! -f "$electron_bin" ]]; then
+    electron_bin="$REPO_DIR/dist/linux-unpacked/auto-claude"
+    app_main="$REPO_DIR/dist/linux-unpacked/resources/app/out/main/index.js"
+  fi
+
+  if [[ ! -f "$electron_bin" ]]; then
+    echo "[aperant] ERROR: Packaged build not found."
+    echo "[aperant] Expected: $packaged_dir/auto-claude"
+    echo "[aperant] Run 'npm run package:linux' first."
+    exit 1
+  fi
+
+  echo "[aperant] Starting Aperant-MCP PACKAGED build with watchdog..."
+  cd "$FRONTEND_DIR"
+
+  # Use the same TypeScript launcher, but point it at the packaged binary
+  exec npx tsx "$WATCHDOG_LAUNCHER" "$electron_bin" "$app_main"
+}
+
+launch_direct() {
+  echo "[aperant] Starting Aperant-MCP DIRECTLY (no watchdog)..."
+  cd "$FRONTEND_DIR"
+  exec npm run dev
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+case "$MODE" in
+  dev)
+    launch_dev_watchdog
+    ;;
+  packaged)
+    launch_packaged_watchdog
+    ;;
+  direct)
+    launch_direct
+    ;;
+  *)
+    echo "Unknown mode: $MODE"
+    exit 1
+    ;;
+esac

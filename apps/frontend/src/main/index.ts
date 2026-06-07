@@ -880,7 +880,7 @@ app.whenReady().then(() => {
   // MCP assign_window tool and the Kanban dropdown both write to this file.
   const windowAssignmentsPath = join(app.getPath('appData'), 'auto-claude-ui', 'window-assignments.json');
   type WindowAssignmentRecord = {
-    handle?: number;
+    handle?: number | string;
     processId: number;
     title: string;
     provider?: string;
@@ -921,7 +921,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     IPC_CHANNELS.RDR_SET_ASSIGNED_WINDOW,
-    (_event: unknown, projectId: string, window: { handle: number; processId: number; title: string }) => {
+    (_event: unknown, projectId: string, window: { handle: number | string; processId: number; title: string }) => {
       if (!projectId || !window?.handle || !window?.processId || !window?.title) {
         return { success: false, error: 'Project ID and window details are required' };
       }
