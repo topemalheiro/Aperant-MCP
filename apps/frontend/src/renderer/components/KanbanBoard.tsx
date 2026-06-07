@@ -49,7 +49,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import type { Task, TaskStatus, TaskOrderState } from '../../shared/types';
+import type { Task, TaskStatus, TaskOrderState, VSCodeWindowInfo } from '../../shared/types';
 
 // Type guard for valid drop column targets - preserves literal type from TASK_STATUS_COLUMNS
 const VALID_DROP_COLUMNS = new Set<string>(TASK_STATUS_COLUMNS);
@@ -1735,7 +1735,7 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   };
 
   // VS Code window state for RDR direct sending
-  const [vsCodeWindows, setVsCodeWindows] = useState<Array<{ handle: number | string; title: string; processId: number }>>([]);
+  const [vsCodeWindows, setVsCodeWindows] = useState<VSCodeWindowInfo[]>([]);
   // Per-project window selection � each project tab has its own RDR target window
   const perProjectWindowRef = useRef<Map<string, number | string>>(new Map());
   const selectedWindowPid = projectId ? (perProjectWindowRef.current.get(projectId) ?? null) : null;
@@ -1754,7 +1754,7 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   const [isLoadingWindows, setIsLoadingWindows] = useState(false);
 
   const resolveAssignedWindowHandle = useCallback((
-    windows: Array<{ handle: number | string; title: string; processId: number }>,
+    windows: VSCodeWindowInfo[],
     assignedWindow?: AssignedWindow | null,
   ): number | string | null => {
     if (!assignedWindow || windows.length === 0) {
@@ -2889,7 +2889,7 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
                     <SelectContent>
                       {vsCodeWindows.map((win) => (
                         <SelectItem key={win.handle} value={win.handle.toString()}>
-                          <span className="truncate max-w-[120px]" title={win.title}>
+                          <span className="truncate max-w-[120px]" title={`${win.title} (${win.backgroundRoute ?? 'unknown'})`}>
                             {(() => {
                               // Strip "Visual Studio Code" and suffixes like "Untracked"
                               const cleaned = win.title
@@ -2898,7 +2898,9 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
                               // "filename - FolderName" → take last segment as folder
                               const parts = cleaned.split(' - ');
                               const folder = parts.length >= 2 ? parts[parts.length - 1] : parts[0] || 'VS Code';
-                              return folder.length > 25 ? `${folder.substring(0, 25)}...` : folder;
+                              const label = folder.length > 25 ? `${folder.substring(0, 25)}...` : folder;
+                              const route = win.backgroundRoute ?? 'unknown';
+                              return `${label} · ${route}`;
                             })()}
                           </span>
                         </SelectItem>

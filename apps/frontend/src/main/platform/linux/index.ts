@@ -17,6 +17,7 @@ export {
   getCdpPort,
   checkCdpForAgent,
   type VSCodeWindow,
+  type BackgroundRoute,
   type SendMessageResult
 } from './window-manager';
 

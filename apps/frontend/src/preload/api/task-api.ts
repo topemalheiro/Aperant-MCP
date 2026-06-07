@@ -17,7 +17,8 @@ import type {
   WorktreeCreatePROptions,
   WorktreeCreatePRResult,
   ImageAttachment,
-  AutoShutdownStatus
+  AutoShutdownStatus,
+  VSCodeWindowInfo
 } from '../../shared/types';
 
 // Types for detailed RDR batch information
@@ -148,7 +149,7 @@ export interface TaskAPI {
   autoRecoverAllTasks: (projectId: string) => Promise<IPCResult<{ recovered: number; taskIds: string[] }>>;
 
   // VS Code Window Management (for RDR message sending)
-  getVSCodeWindows: () => Promise<IPCResult<Array<{ handle: number | string; title: string; processId: number }>>>;
+  getVSCodeWindows: () => Promise<IPCResult<VSCodeWindowInfo[]>>;
   sendRdrToWindow: (identifier: number | string, message: string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
   sendTestRdrToWindow: (identifier: number | string) => Promise<IPCResult<{ success: boolean; error?: string }>>;
 
@@ -521,7 +522,7 @@ export const createTaskAPI = (): TaskAPI => ({
     ipcRenderer.invoke(IPC_CHANNELS.AUTO_RECOVER_ALL_TASKS, projectId),
 
   // VS Code Window Management (for RDR message sending)
-  getVSCodeWindows: (): Promise<IPCResult<Array<{ handle: number; title: string; processId: number }>>> =>
+  getVSCodeWindows: (): Promise<IPCResult<VSCodeWindowInfo[]>> =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_VSCODE_WINDOWS),
 
   sendRdrToWindow: (identifier: number | string, message: string): Promise<IPCResult<{ success: boolean; error?: string }>> =>

@@ -190,8 +190,8 @@ async function sendWithPlatformDefault(
   }
 
   if (isLinux()) {
-    // Linux native: CDP → foreground clipboard → ccli fallback
-    console.log('[RDR Sender] Linux native: trying CDP and foreground methods');
+    // Linux native: IPC pipe (Kilo) → CDP agent injection → foreground clipboard
+    console.log('[RDR Sender] Linux native: trying IPC/CDP/foreground methods');
     try {
       const { sendMessageToWindow: sendLinux } = await import('./linux/window-manager');
       const result = await sendLinux(identifier, message);
@@ -199,13 +199,17 @@ async function sendWithPlatformDefault(
         return result;
       }
       console.warn('[RDR Sender] Linux native failed:', result.error);
+      return { success: false, error: result.error || 'Linux native sending failed' };
     } catch (err) {
       console.error('[RDR Sender] Linux native error:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err)
+      };
     }
-    // Fall through to ccli fallback
   }
 
-  // Unix fallback (macOS or Linux when native fails): ccli
+  // macOS fallback: ccli command (only used on macOS; not available on Linux)
   const template = 'ccli --message "$(cat \'{{messagePath}}\')"';
   const command = substituteVariables(template, {
     message: escapeForShell(message),
@@ -214,7 +218,7 @@ async function sendWithPlatformDefault(
     scriptPath: ''
   });
 
-  console.log('[RDR Sender] Unix fallback: ccli command');
+  console.log('[RDR Sender] macOS fallback: ccli command');
   return executeCommand(command);
 }
 

@@ -20,10 +20,19 @@ import {
   findWindowAgentState,
   type AgentKind
 } from './linux-cdp-client';
+import { sendKiloIpcMessage } from './kilo-ipc-client';
 
 /**
  * Represents a VS Code: window on Linux
  */
+export type BackgroundRoute =
+  | 'ipc-kilo'
+  | 'cdp-kilo'
+  | 'cdp-claude'
+  | 'cdp-codex'
+  | 'cdp-kimi'
+  | 'foreground';
+
 export interface VSCodeWindow {
   /** Native window handle: numeric on X11/Windows, kdotool UUID string on Wayland */
   handle: number | string;
@@ -38,6 +47,12 @@ export interface VSCodeWindow {
   activeAgent?: AgentKind;
   /** Available AI agents in this window */
   availableAgents?: AgentKind[];
+  /** Preferred background sending route for this window */
+  backgroundRoute?: BackgroundRoute;
+  /** Whether this window should use background or foreground sending */
+  sendMethod?: 'background' | 'foreground';
+  /** Path to Kilo Code: named pipe (if available) */
+  pipePath?: string | null;
 }
 
 /**
@@ -102,6 +117,40 @@ function fallbackProcessNameFromTitle(title: string): string {
   return title.includes('Kilo Code') || title.includes('Kimi Code') ? 'kilocode' : 'code';
 }
 
+/**
+ * Resolve the best background sending route for a window.
+ * Ported from Reprompty's Linux platform layer.
+ */
+export function resolveBackgroundRoute(
+  activeAgent: AgentKind,
+  availableAgents: AgentKind[],
+  pipeExists: boolean
+): BackgroundRoute {
+  if (activeAgent === 'kilo-code' && pipeExists) {
+    return 'ipc-kilo';
+  }
+  if (activeAgent === 'kilo-code' && availableAgents.includes('kilo-code')) {
+    return 'cdp-kilo';
+  }
+  if (activeAgent === 'kimi-code' && availableAgents.includes('kimi-code')) {
+    return 'cdp-kimi';
+  }
+  if (activeAgent === 'codex' && availableAgents.includes('codex')) {
+    return 'cdp-codex';
+  }
+  if (activeAgent === 'claude-code' && availableAgents.includes('claude-code')) {
+    return 'cdp-claude';
+  }
+  // When agent is unknown, prefer available agents in order of likelihood
+  if (activeAgent === 'unknown') {
+    if (availableAgents.includes('kilo-code')) return 'cdp-kilo';
+    if (availableAgents.includes('kimi-code')) return 'cdp-kimi';
+    if (availableAgents.includes('codex')) return 'cdp-codex';
+    if (availableAgents.includes('claude-code')) return 'cdp-claude';
+  }
+  return 'foreground';
+}
+
 function getWritableTempDir(): string {
   const candidates = [
     process.env.XDG_RUNTIME_DIR,
@@ -155,6 +204,22 @@ function resolveKiloPipePath(pid: number): string | null {
   }
 
   return null;
+}
+
+function pipeExistsForPid(pid: number): boolean {
+  return resolveKiloPipePath(pid) !== null;
+}
+
+function computeWindowMetadata(
+  window: Omit<VSCodeWindow, 'backgroundRoute' | 'sendMethod' | 'pipePath'>
+): Pick<VSCodeWindow, 'backgroundRoute' | 'sendMethod' | 'pipePath'> {
+  const activeAgent = window.activeAgent ?? 'unknown';
+  const availableAgents = window.availableAgents ?? [];
+  const pipePath = resolveKiloPipePath(window.processId);
+  const pipeExists = pipePath !== null;
+  const backgroundRoute = resolveBackgroundRoute(activeAgent, availableAgents, pipeExists);
+  const sendMethod: 'background' | 'foreground' = backgroundRoute === 'foreground' ? 'foreground' : 'background';
+  return { backgroundRoute, sendMethod, pipePath };
 }
 
 function listWindowsKdotool(): Array<{
@@ -549,7 +614,12 @@ export async function getVSCodeWindows(): Promise<VSCodeWindow[]> {
   }
 
   console.log(`[LinuxWindowManager] Returning ${windows.length} windows`);
-  return windows;
+
+  // Resolve background route / Kilo pipe path for every detected window
+  return windows.map((win) => {
+    const meta = computeWindowMetadata(win);
+    return { ...win, ...meta };
+  });
 }
 
 export function findWindowByTitle(pattern: string): VSCodeWindow | undefined {
@@ -572,7 +642,9 @@ export function findWindow(identifier: number | string): VSCodeWindow | undefine
   if (typeof identifier === 'number') {
     return findWindowByHandle(identifier) ?? findWindowByProcessId(identifier);
   }
-  return findWindowByTitle(identifier);
+  // String identifiers may be kdotool UUID handles (Wayland) or title patterns.
+  // Try handle matching first, then fall back to title substring matching.
+  return findWindowByHandle(identifier) ?? findWindowByTitle(identifier);
 }
 
 export function isWindowValid(handle: number | string): boolean {
@@ -642,10 +714,13 @@ function getVSCodeWindowsSync(): VSCodeWindow[] {
 /**
  * Send a message to a VS Code: window on Linux.
  *
- * Strategy:
- * 1. Try CDP-based background sending (no window focus needed)
- * 2. Fall back to foreground clipboard simulation (xdotool/xclip or kdotool/wl-copy)
- * 3. Return error if all methods fail
+ * Strategy (ported from Reprompty's backgroundRoute concept):
+ * 1. `ipc-kilo`    → Kilo Code: native IPC pipe (fastest, no focus)
+ * 2. `cdp-kilo`    → CDP injection into Kilo Code: webview
+ * 3. `cdp-kimi`    → CDP injection into Kimi Code: webview
+ * 4. `cdp-codex`   → CDP injection into Codex webview
+ * 5. `cdp-claude`  → CDP injection into Claude Code: webview
+ * 6. `foreground`  → clipboard simulation with window focus
  */
 export async function sendMessageToWindow(
   identifier: number | string,
@@ -673,18 +748,39 @@ export async function sendMessageToWindow(
     };
   }
 
+  const route = targetWindow.backgroundRoute ?? 'foreground';
+  const cdpPort = targetWindow.cdpPort || getCdpPort();
+
   console.log(
-    `[LinuxWindowManager] Found window: "${targetWindow.title}" (PID: ${targetWindow.processId})`
+    `[LinuxWindowManager] Found window: "${targetWindow.title}" (PID: ${targetWindow.processId}, route: ${route})`
   );
 
-  // Strategy 1: CDP-based background sending
-  const cdpPort = targetWindow.cdpPort || getCdpPort();
-  if (cdpPort) {
-    const activeAgent = targetWindow.activeAgent;
-    if (activeAgent && activeAgent !== 'unknown') {
-      console.log(`[LinuxWindowManager] Trying CDP send via ${activeAgent} on port ${cdpPort}`);
+  // Route 1: Kilo Code: native IPC pipe
+  if (route === 'ipc-kilo' && targetWindow.pipePath) {
+    console.log(`[LinuxWindowManager] Trying Kilo IPC send on ${targetWindow.pipePath}`);
+    const result = await sendKiloIpcMessage(targetWindow.pipePath, message);
+    if (result.success) {
+      console.log('[LinuxWindowManager] Kilo IPC send succeeded');
+      return { success: true };
+    }
+    console.warn('[LinuxWindowManager] Kilo IPC send failed:', result.error);
+    // Fall through to CDP/foreground as a safety net
+  }
+
+  // Routes 2-5: CDP agent injection
+  const cdpAgents: Record<Exclude<BackgroundRoute, 'ipc-kilo' | 'foreground'>, Exclude<AgentKind, 'unknown'>> = {
+    'cdp-kilo': 'kilo-code',
+    'cdp-kimi': 'kimi-code',
+    'cdp-codex': 'codex',
+    'cdp-claude': 'claude-code'
+  };
+
+  if (route.startsWith('cdp-') && cdpPort) {
+    const agent = cdpAgents[route as Exclude<BackgroundRoute, 'ipc-kilo' | 'foreground'>];
+    if (agent) {
+      console.log(`[LinuxWindowManager] Trying CDP send via ${agent} on port ${cdpPort}`);
       const result = await sendViaAgentCdp(cdpPort, message, {
-        agent: activeAgent,
+        agent,
         windowTitle: targetWindow.title
       });
       if (result.success) {
@@ -692,33 +788,35 @@ export async function sendMessageToWindow(
         return { success: true };
       }
       console.warn('[LinuxWindowManager] CDP send failed:', result.error);
-    } else {
-      // Try common agents in order of preference
-      const agentsToTry: Exclude<AgentKind, 'unknown'>[] = ['kilo-code', 'kimi-code', 'claude-code', 'codex'];
-      const available = targetWindow.availableAgents || [];
-      for (const agent of agentsToTry) {
-        if (available.length > 0 && !available.includes(agent)) continue;
-        console.log(`[LinuxWindowManager] Trying CDP send via ${agent} on port ${cdpPort}`);
-        const result = await sendViaAgentCdp(cdpPort, message, {
-          agent,
-          windowTitle: targetWindow.title
-        });
-        if (result.success) {
-          console.log('[LinuxWindowManager] CDP send succeeded via', agent);
-          return { success: true };
-        }
+    }
+  }
+
+  // If the resolved route failed but we have a CDP port, try a sensible fallback order
+  if (cdpPort) {
+    const fallbackOrder: Exclude<AgentKind, 'unknown'>[] = ['kilo-code', 'kimi-code', 'codex', 'claude-code'];
+    const available = targetWindow.availableAgents ?? [];
+    for (const agent of fallbackOrder) {
+      if (available.length > 0 && !available.includes(agent)) continue;
+      console.log(`[LinuxWindowManager] Fallback CDP send via ${agent} on port ${cdpPort}`);
+      const result = await sendViaAgentCdp(cdpPort, message, {
+        agent,
+        windowTitle: targetWindow.title
+      });
+      if (result.success) {
+        console.log('[LinuxWindowManager] Fallback CDP send succeeded via', agent);
+        return { success: true };
       }
     }
   }
 
-  // Strategy 2: Foreground clipboard simulation
+  // Route 6 / last resort: Foreground clipboard simulation
   console.log('[LinuxWindowManager] Falling back to foreground clipboard simulation');
   const foregroundResult = await sendMessageForeground(targetWindow, message);
   if (foregroundResult) {
     return { success: true };
   }
 
-  return { success: false, error: 'All Linux sending methods failed (CDP and foreground)' };
+  return { success: false, error: `All Linux sending methods failed (last route: ${route})` };
 }
 
 /**

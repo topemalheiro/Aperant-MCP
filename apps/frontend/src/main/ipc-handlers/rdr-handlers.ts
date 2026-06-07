@@ -2447,7 +2447,7 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
   // Get list of VS Code windows
   ipcMain.handle(
     IPC_CHANNELS.GET_VSCODE_WINDOWS,
-    async (): Promise<IPCResult<Array<{ handle: number | string; title: string; processId: number }>>> => {
+    async (): Promise<IPCResult<import('../../shared/types/ipc').VSCodeWindowInfo[]>> => {
       console.log('[RDR] Getting VS Code windows');
       console.log(`[RDR] isLinux()=${isLinux()} process.platform=${process.platform}`);
 
@@ -2459,7 +2459,17 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
           console.log(`[RDR] Found ${windows.length} VS Code: windows on Linux`);
           return {
             success: true,
-            data: windows.map((w) => ({ handle: w.handle, title: w.title, processId: w.processId }))
+            data: windows.map((w) => ({
+              handle: w.handle,
+              title: w.title,
+              processId: w.processId,
+              backgroundRoute: w.backgroundRoute,
+              sendMethod: w.sendMethod,
+              activeAgent: w.activeAgent,
+              availableAgents: w.availableAgents,
+              pipePath: w.pipePath,
+              kdotoolHandle: w.kdotoolHandle
+            }))
           };
         }
 
@@ -2471,7 +2481,11 @@ export function registerRdrHandlers(agentManager?: AgentManager): void {
 
         return {
           success: true,
-          data: windows
+          data: windows.map((w) => ({
+            handle: w.handle,
+            title: w.title,
+            processId: w.processId
+          }))
         };
       } catch (error) {
         console.error('[RDR] Failed to get VS Code: windows:', error);
