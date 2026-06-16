@@ -63,7 +63,9 @@
       "openrouter": "OpenRouter",
       "groq": "Groq",
       "zaiGlobal": "z.AI (Mondial)",
-      "zaiChina": "z.AI (Chine)"
+      "zaiChina": "z.AI (Chine)",
+      "minimax": "MiniMax",
+      "kimi": "Kimi (Moonshot)"
     },
     "fields": {
       "name": "Nom",

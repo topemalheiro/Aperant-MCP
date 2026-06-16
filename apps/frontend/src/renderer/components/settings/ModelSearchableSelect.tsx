@@ -28,6 +28,7 @@ import type { ModelInfo } from '@shared/types/profile';
  * Additional models to include for specific APIs that don't return all available models.
  * OpenRouter doesn't return MiniMax M2.5 Highspeed in their /v1/models response.
  * MiniMax API may not support model listing, so we provide known models.
+ * Kimi (Moonshot) API is OpenAI-compatible; provide known model IDs.
  */
 const ADDITIONAL_MODELS: Record<string, ModelInfo[]> = {
   'https://openrouter.ai/api': [
@@ -38,6 +39,11 @@ const ADDITIONAL_MODELS: Record<string, ModelInfo[]> = {
     { id: 'MiniMax-M2.5', display_name: 'MiniMax M2.5' },
     { id: 'MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' },
     { id: 'MiniMax-M2.7-highspeed', display_name: 'MiniMax M2.7 Highspeed' },
+  ],
+  'https://api.moonshot.cn/v1': [
+    { id: 'kimi-k2-5', display_name: 'Kimi K2.5' },
+    { id: 'kimi-k2-6', display_name: 'Kimi K2.6' },
+    { id: 'kimi-k2-7', display_name: 'Kimi K2.7' },
   ],
 };
 
@@ -267,6 +273,16 @@ export function ModelSearchableSelect({
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  // Reset model list when baseUrl or apiKey changes so switching presets
+  // doesn't leave stale models (e.g., MiniMax models showing for Anthropic).
+  useEffect(() => {
+    setModels([]);
+    setSearchQuery('');
+    setError(null);
+    setModelDiscoveryNotSupported(false);
+    setIsManualInput(false);
+  }, [baseUrl, apiKey]);
 
   return (
     <div ref={containerRef} className={cn('relative', className)}>

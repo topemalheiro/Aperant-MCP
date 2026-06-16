@@ -64,7 +64,8 @@
       "groq": "Groq",
       "zaiGlobal": "z.AI (Global)",
       "zaiChina": "z.AI (China)",
-      "minimax": "MiniMax"
+      "minimax": "MiniMax",
+      "kimi": "Kimi (Moonshot)"
     },
     "fields": {
       "name": "Name",

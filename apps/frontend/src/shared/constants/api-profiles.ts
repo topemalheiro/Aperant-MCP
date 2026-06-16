@@ -36,5 +36,11 @@ export const API_PROVIDER_PRESETS: readonly ApiProviderPreset[] = [
     baseUrl: 'https://api.minimax.io/anthropic',
     labelKey: 'settings:apiProfiles.presets.minimax',
     defaultModel: 'MiniMax-M2.5-highspeed'
+  },
+  {
+    id: 'kimi',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    labelKey: 'settings:apiProfiles.presets.kimi',
+    defaultModel: 'kimi-k2-5'
   }
 ];
