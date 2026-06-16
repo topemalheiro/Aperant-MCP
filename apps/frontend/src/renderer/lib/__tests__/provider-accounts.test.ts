@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderAccount } from '../../../shared/types/provider-account';
 import {
+  getProviderModelLabels,
   getProviderThinkingOptions,
   normalizeThinkingLevelForProvider,
 } from '../provider-accounts';
@@ -34,5 +35,13 @@ describe('provider-accounts thinking helpers', () => {
 
     expect(normalizeThinkingLevelForProvider('xhigh', anthropicAccount)).toBe('high');
     expect(normalizeThinkingLevelForProvider('xhigh', openAIAccount)).toBe('xhigh');
+  });
+
+  it('returns Kimi model labels for a Kimi provider account', () => {
+    const kimiAccount = createProviderAccount('kimi');
+    const labels = getProviderModelLabels(kimiAccount, []);
+    expect(labels?.opus).toBe('Kimi K2.7');
+    expect(labels?.sonnet).toBe('Kimi K2.6');
+    expect(labels?.haiku).toBe('Kimi K2.5');
   });
 });

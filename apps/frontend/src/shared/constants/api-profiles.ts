@@ -3,6 +3,11 @@ export type ApiProviderPreset = {
   baseUrl: string;
   labelKey: string;
   defaultModel?: string;
+  models?: {
+    haiku?: string;
+    sonnet?: string;
+    opus?: string;
+  };
 };
 
 export const API_PROVIDER_PRESETS: readonly ApiProviderPreset[] = [
@@ -41,6 +46,11 @@ export const API_PROVIDER_PRESETS: readonly ApiProviderPreset[] = [
     id: 'kimi',
     baseUrl: 'https://api.moonshot.cn/v1',
     labelKey: 'settings:apiProfiles.presets.kimi',
-    defaultModel: 'kimi-k2-5'
+    defaultModel: 'kimi-k2-6',
+    models: {
+      haiku: 'kimi-k2-5',
+      sonnet: 'kimi-k2-6',
+      opus: 'kimi-k2-7',
+    }
   }
 ];

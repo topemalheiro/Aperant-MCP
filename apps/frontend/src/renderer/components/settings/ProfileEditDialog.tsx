@@ -164,9 +164,9 @@ export function ProfileEditDialog({ open, onOpenChange, onSaved, profile }: Prof
     // API key so discovery can still work and previously cached models can be
     // reused when the user switches back to this provider.
     setDefaultModel(preset.defaultModel ?? '');
-    setHaikuModel('');
-    setSonnetModel('');
-    setOpusModel('');
+    setHaikuModel(preset.models?.haiku ?? '');
+    setSonnetModel(preset.models?.sonnet ?? '');
+    setOpusModel(preset.models?.opus ?? '');
     if (!name.trim()) {
       setName(t(preset.labelKey));
     }

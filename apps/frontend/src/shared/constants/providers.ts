@@ -9,6 +9,15 @@ export const OPENAI_EQUIVALENT_MODEL_LABELS: Record<string, string> = {
   'opus-4.5': 'GPT-5.4',
 };
 
+export const KIMI_MODEL_LABELS: Record<string, string> = {
+  default: 'Kimi K2.6',
+  haiku: 'Kimi K2.5',
+  sonnet: 'Kimi K2.6',
+  opus: 'Kimi K2.7',
+  'opus-1m': 'Kimi K2.7',
+  'opus-4.5': 'Kimi K2.7',
+};
+
 export const PROVIDER_REGISTRY: ProviderInfo[] = [
   {
     id: 'anthropic',

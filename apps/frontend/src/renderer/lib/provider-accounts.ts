@@ -2,6 +2,7 @@ import type { ProviderAccount } from '../../shared/types';
 import type { APIProfile } from '../../shared/types/profile';
 import {
   OPENAI_EQUIVALENT_MODEL_LABELS,
+  KIMI_MODEL_LABELS,
 } from '../../shared/constants/providers';
 import {
   getThinkingLevelsForProvider,
@@ -72,6 +73,10 @@ export function getProviderModelLabels(
 
   if (account.provider === 'openai') {
     return OPENAI_PROVIDER_MODEL_LABELS;
+  }
+
+  if (account.provider === 'kimi') {
+    return KIMI_MODEL_LABELS;
   }
 
   if (account.provider !== 'openai-compatible' || !account.apiProfileId) {

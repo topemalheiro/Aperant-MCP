@@ -767,13 +767,14 @@ export class AgentProcessManager {
           if (!accessToken) {
             throw new Error(`Kimi account "${providerAccount.name}" is not authenticated or the token has expired.`);
           }
+          // Kimi Code model mapping: K2.7 -> Opus, K2.6 -> Sonnet, K2.5 -> Haiku
           apiProfileEnv = {
             ANTHROPIC_BASE_URL: 'https://api.kimi.com/coding/',
             ANTHROPIC_AUTH_TOKEN: accessToken,
-            ANTHROPIC_MODEL: 'kimi-for-coding',
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'kimi-for-coding',
-            ANTHROPIC_DEFAULT_SONNET_MODEL: 'kimi-for-coding',
-            ANTHROPIC_DEFAULT_OPUS_MODEL: 'kimi-for-coding',
+            ANTHROPIC_MODEL: 'kimi-k2-6',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'kimi-k2-5',
+            ANTHROPIC_DEFAULT_SONNET_MODEL: 'kimi-k2-6',
+            ANTHROPIC_DEFAULT_OPUS_MODEL: 'kimi-k2-7',
             CLAUDE_CODE_OAUTH_TOKEN: '',
             CLAUDE_CONFIG_DIR: '',
             ANTHROPIC_API_KEY: '',
