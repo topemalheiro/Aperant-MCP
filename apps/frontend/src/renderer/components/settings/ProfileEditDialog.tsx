@@ -159,10 +159,10 @@ export function ProfileEditDialog({ open, onOpenChange, onSaved, profile }: Prof
     if (!preset) return;
     setPresetId(id);
     setBaseUrl(preset.baseUrl);
-    // Presets represent different providers: clear credentials and model mappings
-    // from the previous provider so they do not leak into the new preset.
-    setApiKey('');
-    setIsChangingApiKey(true);
+    // Presets are different providers: clear selected model mappings so the
+    // previous provider's model does not leak into the new preset. Keep the
+    // API key so discovery can still work and previously cached models can be
+    // reused when the user switches back to this provider.
     setDefaultModel(preset.defaultModel ?? '');
     setHaikuModel('');
     setSonnetModel('');

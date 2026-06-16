@@ -329,7 +329,7 @@ describe('ProfileEditDialog - Create Mode', () => {
     });
   });
 
-  it('should clear API key and model fields when switching presets', async () => {
+  it('should preserve API key but clear model fields when switching presets', async () => {
     const mockClearDiscoveredModels = vi.fn();
     const mockDiscoverModels = vi.fn().mockResolvedValue([
       { id: 'MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' }
@@ -367,9 +367,10 @@ describe('ProfileEditDialog - Create Mode', () => {
     const anthropicOption = await screen.findByRole('option', { name: 'Anthropic' });
     fireEvent.click(anthropicOption);
 
-    // API key and MiniMax default model should be cleared
+    // API key should be preserved so discovery still works; MiniMax default
+    // model should be cleared so it does not leak into the new preset.
     await waitFor(() => {
-      expect(screen.getByLabelText(/api key/i)).toHaveValue('');
+      expect(screen.getByLabelText(/api key/i)).toHaveValue('sk-minimax-test-key-12345');
       expect(screen.queryByDisplayValue('MiniMax-M2.5-highspeed')).not.toBeInTheDocument();
     });
   });
