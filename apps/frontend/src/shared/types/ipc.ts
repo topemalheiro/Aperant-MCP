@@ -186,6 +186,11 @@ export interface CodexAuthState {
   email?: string;
 }
 
+export interface KimiAuthState {
+  isAuthenticated: boolean;
+  expiresAt?: number;
+}
+
 export interface ProviderAccountsPayload {
   accounts: ProviderAccount[];
   globalPriorityOrder: string[];
@@ -424,6 +429,12 @@ export interface ElectronAPI {
   codexAuthStatus: (accountId: string) => Promise<IPCResult<CodexAuthState>>;
   /** Clear stored OpenAI Codex authentication */
   codexAuthLogout: (accountId: string) => Promise<IPCResult>;
+  /** Authenticate Kimi Code with OAuth device flow and persist the token bundle locally */
+  kimiAuthLogin: (accountId: string) => Promise<IPCResult<KimiAuthState>>;
+  /** Get the current Kimi Code authentication state */
+  kimiAuthStatus: (accountId: string) => Promise<IPCResult<KimiAuthState>>;
+  /** Clear stored Kimi Code authentication */
+  kimiAuthLogout: (accountId: string) => Promise<IPCResult>;
   /** Read desktop pin state and project associations */
   getDesktopState: () => Promise<IPCResult<DesktopStateSnapshot>>;
   /** Enable or disable global virtual-desktop pinning */

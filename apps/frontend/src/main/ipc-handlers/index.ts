@@ -23,6 +23,7 @@ import { registerRoadmapHandlers } from './roadmap-handlers';
 import { registerContextHandlers } from './context-handlers';
 import { registerEnvHandlers } from './env-handlers';
 import { registerCodexAuthHandlers } from './codex-auth-handlers';
+import { registerKimiAuthHandlers } from './kimi-auth-handlers';
 import { registerLinearHandlers } from './linear-handlers';
 import { registerGithubHandlers } from './github-handlers';
 import { registerGitlabHandlers } from './gitlab-handlers';
@@ -90,6 +91,7 @@ export function setupIpcHandlers(
   registerSettingsHandlers(agentManager, getMainWindow);
   registerProviderAccountHandlers();
   registerCodexAuthHandlers();
+  registerKimiAuthHandlers();
   registerDesktopHandlers();
 
   // File explorer handlers

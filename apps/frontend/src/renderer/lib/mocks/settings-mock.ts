@@ -178,6 +178,33 @@ export const settingsMock = {
     };
   },
 
+  // Kimi Code OAuth (mock)
+  kimiAuthLogin: async (accountId: string) => {
+    const state = {
+      isAuthenticated: true,
+      expiresAt: Date.now() + (60 * 60 * 1000)
+    };
+    mockCodexStates.set(accountId, state);
+    return {
+      success: true,
+      data: state
+    };
+  },
+
+  kimiAuthStatus: async (accountId: string) => ({
+    success: true,
+    data: mockCodexStates.get(accountId) ?? {
+      isAuthenticated: false
+    }
+  }),
+
+  kimiAuthLogout: async (accountId: string) => {
+    mockCodexStates.delete(accountId);
+    return {
+      success: true
+    };
+  },
+
   // App Info
   getAppVersion: async () => '0.1.0-browser',
 

@@ -31,7 +31,7 @@
     },
     "accounts": {
       "title": "Accounts",
-      "description": "Claude accounts & API endpoints"
+      "description": "Claude Code, OpenAI Codex, Kimi Code, and API endpoints"
     },
     "updates": {
       "title": "Updates",
@@ -604,6 +604,7 @@
     "tabs": {
       "claudeCode": "Claude Code",
       "openaiCodex": "OpenAI Codex",
+      "kimiCode": "Kimi Code",
       "customEndpoints": "Custom Endpoints"
     },
     "claudeCode": {
@@ -632,7 +633,6 @@
     },
     "openaiCodex": {
       "description": "Authenticate natively with your OpenAI account for Codex.",
-      "runtimeNote": "Codex accounts now run tasks natively in the fork, participate in provider priority, and report live usage for account switching and RDR.",
       "accountLabel": "OpenAI Account",
       "connected": "Connected",
       "notConnected": "Not Connected",
@@ -643,6 +643,17 @@
       "disconnect": "Disconnect",
       "disconnecting": "Disconnecting...",
       "expiresAt": "Expires: {{date}}"
+    },
+    "kimiCode": {
+      "description": "Authenticate with your Kimi Code subscription through browser OAuth.",
+      "noAccount": "No Kimi account connected yet",
+      "authenticate": "Authenticate",
+      "authenticating": "Authenticating...",
+      "reauthenticate": "Re-authenticate",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting...",
+      "expiresAt": "Expires: {{date}}",
+      "accountNamePlaceholder": "Account name (e.g., Work, Personal)"
     },
     "customEndpoints": {
       "description": "Configure custom Anthropic-compatible API endpoints",
@@ -734,6 +745,8 @@
       "codexStatusFailed": "Failed to Load OpenAI Status",
       "codexLoginFailed": "Failed to Authenticate OpenAI",
       "codexLogoutFailed": "Failed to Disconnect OpenAI",
+      "kimiLoginFailed": "Failed to Authenticate Kimi",
+      "kimiLogoutFailed": "Failed to Disconnect Kimi",
       "tokenSaved": "Token Saved",
       "tokenSavedDescription": "Your token has been saved successfully.",
       "tokenSaveFailed": "Failed to Save Token",

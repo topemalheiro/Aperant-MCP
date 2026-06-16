@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProviderAccount } from '../../../../shared/types/provider-account';
+import type { ProviderAccount } from '../../../shared/types/provider-account';
 import {
   getProviderThinkingOptions,
   normalizeThinkingLevelForProvider,

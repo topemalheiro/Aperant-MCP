@@ -42,7 +42,7 @@ import { hasUsageMonitoring } from '../../../shared/utils/provider-detection';
 import { loadClaudeProfiles as loadGlobalClaudeProfiles } from '../../stores/claude-profile-store';
 import { useSettingsStore, loadSettings as reloadSettingsStore } from '../../stores/settings-store';
 import { useToast } from '../../hooks/use-toast';
-import type { AppSettings, ClaudeProfile, ClaudeAutoSwitchSettings, CodexAuthState, ProfileUsageSummary, ProviderAccount } from '../../../shared/types';
+import type { AppSettings, ClaudeProfile, ClaudeAutoSwitchSettings, CodexAuthState, KimiAuthState, ProfileUsageSummary, ProviderAccount } from '../../../shared/types';
 import type { UnifiedAccount } from '../../../shared/types/unified-account';
 import type { APIProfile } from '@shared/types/profile';
 import {
@@ -115,6 +115,17 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
   const [deletingOpenAIAccountId, setDeletingOpenAIAccountId] = useState<string | null>(null);
 
   // ============================================
+  // Kimi Code (OAuth) state
+  // ============================================
+  const [kimiAuthStates, setKimiAuthStates] = useState<Record<string, KimiAuthState>>({});
+  const [kimiLoadingIds, setKimiLoadingIds] = useState<Record<string, boolean>>({});
+  const [newKimiAccountName, setNewKimiAccountName] = useState('');
+  const [isAddingKimiAccount, setIsAddingKimiAccount] = useState(false);
+  const [editingKimiAccountId, setEditingKimiAccountId] = useState<string | null>(null);
+  const [editingKimiAccountName, setEditingKimiAccountName] = useState('');
+  const [deletingKimiAccountId, setDeletingKimiAccountId] = useState<string | null>(null);
+
+  // ============================================
   // Custom Endpoints (API Profiles) state
   // ============================================
   const {
@@ -171,6 +182,11 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
     [providerAccounts]
   );
 
+  const kimiAccounts = useMemo(
+    () => providerAccounts.filter((account) => account.provider === 'kimi'),
+    [providerAccounts]
+  );
+
   const loadCodexAuthStatuses = useCallback(async (accounts: ProviderAccount[]) => {
     const openAIProviderAccounts = accounts.filter((account) => account.provider === 'openai');
     if (openAIProviderAccounts.length === 0) {
@@ -194,6 +210,27 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
     );
   }, []);
 
+  const loadKimiAuthStatuses = useCallback(async (accounts: ProviderAccount[]) => {
+    const kimiProviderAccounts = accounts.filter((account) => account.provider === 'kimi');
+    if (kimiProviderAccounts.length === 0) {
+      setKimiAuthStates({});
+      return;
+    }
+
+    const results = await Promise.all(
+      kimiProviderAccounts.map(async (account) => {
+        try {
+          const result = await window.electronAPI.kimiAuthStatus(account.id);
+          return [account.id, result.success && result.data ? result.data : { isAuthenticated: false }] as const;
+        } catch {
+          return [account.id, { isAuthenticated: false }] as const;
+        }
+      })
+    );
+
+    setKimiAuthStates(Object.fromEntries(results));
+  }, []);
+
   const loadProviderAccounts = useCallback(async () => {
     setIsLoadingProviderAccounts(true);
     try {
@@ -210,6 +247,7 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
           _migratedProviderAccounts: true,
         });
         await loadCodexAuthStatuses(result.data.accounts);
+        await loadKimiAuthStatuses(result.data.accounts);
         await reloadSettingsStore();
       } else {
         toast({
@@ -327,11 +365,34 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
           isAuthenticated: authState?.isAuthenticated ?? false,
           needsReauthentication: usageData?.needsReauthentication ?? !authState?.isAuthenticated,
         });
+        continue;
+      }
+
+      if (account.provider === 'kimi') {
+        const authState = kimiAuthStates[account.id];
+        const usageData = profileUsageData.get(account.id);
+        accounts.set(account.id, {
+          id: account.id,
+          name: account.name,
+          type: 'oauth',
+          displayName: account.name,
+          identifier: account.email || t('accounts.priority.noEmail'),
+          isActive: account.id === activeProviderAccountId,
+          isNext: false,
+          isAvailable: authState?.isAuthenticated ?? false,
+          hasUnlimitedUsage: false,
+          sessionPercent: usageData?.sessionPercent,
+          weeklyPercent: usageData?.weeklyPercent,
+          isRateLimited: usageData?.isRateLimited,
+          rateLimitType: usageData?.rateLimitType,
+          isAuthenticated: authState?.isAuthenticated ?? false,
+          needsReauthentication: usageData?.needsReauthentication ?? !authState?.isAuthenticated,
+        });
       }
     }
 
     return accounts;
-  }, [activeProviderAccountId, apiProfiles, claudeProfiles, codexAuthStates, profileUsageData, providerAccounts, t]);
+  }, [activeProviderAccountId, apiProfiles, claudeProfiles, codexAuthStates, kimiAuthStates, profileUsageData, providerAccounts, t]);
 
   const unifiedPriorityAccounts = useMemo(
     () => priorityOrder
@@ -872,6 +933,176 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
       await reloadSettingsStore();
     } finally {
       setDeletingOpenAIAccountId(null);
+    }
+  };
+
+  // ============================================
+  // Kimi Code (OAuth) handlers
+  // ============================================
+  const handleAddKimiAccount = async () => {
+    if (!newKimiAccountName.trim()) return;
+
+    setIsAddingKimiAccount(true);
+    try {
+      const result = await window.electronAPI.saveProviderAccount({
+        provider: 'kimi',
+        name: newKimiAccountName.trim(),
+        authType: 'oauth',
+        billingModel: 'subscription',
+      });
+
+      if (result.success && result.data) {
+        setNewKimiAccountName('');
+        await loadProviderAccounts();
+        await handleKimiLogin(result.data.id);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: t('accounts.toast.addProfileFailed'),
+          description: result.error || t('accounts.toast.tryAgain'),
+        });
+      }
+    } catch (err) {
+      console.warn('[AccountSettings] Failed to add Kimi account:', err);
+      toast({
+        variant: 'destructive',
+        title: t('accounts.toast.addProfileFailed'),
+        description: t('accounts.toast.tryAgain'),
+      });
+    } finally {
+      setIsAddingKimiAccount(false);
+    }
+  };
+
+  const handleKimiLogin = async (accountId: string) => {
+    setKimiLoadingIds((current) => ({ ...current, [accountId]: true }));
+    try {
+      const result = await window.electronAPI.kimiAuthLogin(accountId);
+      if (result.success) {
+        setKimiAuthStates((current) => ({
+          ...current,
+          [accountId]: result.data ?? { isAuthenticated: false },
+        }));
+        await loadProviderAccounts();
+        await reloadSettingsStore();
+        await loadProfileUsageData(true);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: t('accounts.toast.kimiLoginFailed'),
+          description: result.error || t('accounts.toast.tryAgain'),
+        });
+      }
+    } catch (err) {
+      console.warn('[AccountSettings] Failed to authenticate Kimi:', err);
+      toast({
+        variant: 'destructive',
+        title: t('accounts.toast.kimiLoginFailed'),
+        description: t('accounts.toast.tryAgain'),
+      });
+    } finally {
+      setKimiLoadingIds((current) => ({ ...current, [accountId]: false }));
+    }
+  };
+
+  const handleKimiLogout = async (accountId: string) => {
+    setKimiLoadingIds((current) => ({ ...current, [accountId]: true }));
+    try {
+      const result = await window.electronAPI.kimiAuthLogout(accountId);
+      if (result.success) {
+        setKimiAuthStates((current) => ({
+          ...current,
+          [accountId]: { isAuthenticated: false },
+        }));
+      } else {
+        toast({
+          variant: 'destructive',
+          title: t('accounts.toast.kimiLogoutFailed'),
+          description: result.error || t('accounts.toast.tryAgain'),
+        });
+      }
+    } catch (err) {
+      console.warn('[AccountSettings] Failed to clear Kimi auth:', err);
+      toast({
+        variant: 'destructive',
+        title: t('accounts.toast.kimiLogoutFailed'),
+        description: t('accounts.toast.tryAgain'),
+      });
+    } finally {
+      setKimiLoadingIds((current) => ({ ...current, [accountId]: false }));
+      await loadProviderAccounts();
+      await loadProfileUsageData(true);
+    }
+  };
+
+  const handleDeleteKimiAccount = async (accountId: string) => {
+    setDeletingKimiAccountId(accountId);
+    try {
+      await window.electronAPI.kimiAuthLogout(accountId).catch(() => undefined);
+      const result = await window.electronAPI.deleteProviderAccount(accountId);
+      if (!result.success) {
+        toast({
+          variant: 'destructive',
+          title: t('accounts.toast.deleteProfileFailed'),
+          description: result.error || t('accounts.toast.tryAgain'),
+        });
+        return;
+      }
+
+      const nextDefaultProviderId = autoSwitchSettings?.defaultProviderId === accountId
+        ? priorityOrder.find((id) => id !== accountId)
+        : autoSwitchSettings?.defaultProviderId;
+
+      if (autoSwitchSettings?.defaultProviderId === accountId) {
+        await handleUpdateAutoSwitch({ defaultProviderId: nextDefaultProviderId });
+      }
+
+      await loadProviderAccounts();
+      await reloadSettingsStore();
+    } finally {
+      setDeletingKimiAccountId(null);
+    }
+  };
+
+  // ============================================
+  // Kimi Code account editing helpers
+  // ============================================
+  const startEditingKimiAccount = (account: ProviderAccount) => {
+    setEditingKimiAccountId(account.id);
+    setEditingKimiAccountName(account.name);
+  };
+
+  const cancelEditingKimiAccount = () => {
+    setEditingKimiAccountId(null);
+    setEditingKimiAccountName('');
+  };
+
+  const handleRenameKimiAccount = async () => {
+    if (!editingKimiAccountId || !editingKimiAccountName.trim()) return;
+
+    try {
+      const result = await window.electronAPI.updateProviderAccount(
+        editingKimiAccountId,
+        { name: editingKimiAccountName.trim() }
+      );
+      if (result.success) {
+        await loadProviderAccounts();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: t('accounts.toast.renameProfileFailed'),
+          description: result.error || t('accounts.toast.tryAgain'),
+        });
+      }
+    } catch (_err) {
+      toast({
+        variant: 'destructive',
+        title: t('accounts.toast.renameProfileFailed'),
+        description: t('accounts.toast.tryAgain'),
+      });
+    } finally {
+      setEditingKimiAccountId(null);
+      setEditingKimiAccountName('');
     }
   };
 
@@ -1685,6 +1916,197 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
                   className="gap-1 shrink-0"
                 >
                   {isAddingOpenAIAccount ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Plus className="h-3 w-3" />
+                  )}
+                  {tCommon('buttons.add')}
+                </Button>
+              </div>
+            </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-muted-foreground" />
+            <h4 className="text-sm font-semibold text-foreground">{t('accounts.tabs.kimiCode')}</h4>
+          </div>
+            <div className="rounded-lg bg-muted/30 border border-border p-4 space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {t('accounts.kimiCode.description')}
+                </p>
+              </div>
+
+              {kimiAccounts.length === 0 && (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground">{t('accounts.kimiCode.noAccount')}</p>
+                </div>
+              )}
+
+              {kimiAccounts.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {kimiAccounts.map((account) => {
+                    const authState = kimiAuthStates[account.id];
+                    const isBusy = kimiLoadingIds[account.id] ?? false;
+                    const isEditing = editingKimiAccountId === account.id;
+                    const isActiveProvider = account.id === activeProviderAccountId;
+                    return (
+                      <div
+                        key={account.id}
+                        className={cn(
+                          'flex items-center justify-between p-3 rounded-lg border transition-colors',
+                          isActiveProvider
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:bg-accent/50'
+                        )}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {isEditing ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={editingKimiAccountName}
+                                onChange={(e) => setEditingKimiAccountName(e.target.value)}
+                                className="h-7 text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameKimiAccount();
+                                  if (e.key === 'Escape') cancelEditingKimiAccount();
+                                }}
+                                autoFocus
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleRenameKimiAccount}
+                                disabled={!editingKimiAccountName.trim()}
+                                className="h-7 w-7"
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={cancelEditingKimiAccount}
+                                className="h-7 w-7"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium truncate">{account.name}</h4>
+                                {isActiveProvider && (
+                                  <span className="flex items-center text-xs text-primary">
+                                    <Check className="h-3 w-3 mr-1" />
+                                    {t('accounts.claudeCode.active')}
+                                  </span>
+                                )}
+                                {authState?.isAuthenticated && (
+                                  <span className="text-xs text-green-500">
+                                    {t('accounts.claudeCode.authenticated')}
+                                  </span>
+                                )}
+                              </div>
+                              {authState?.isAuthenticated && authState.expiresAt && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {t('accounts.kimiCode.expiresAt', { date: formatTimestamp(authState.expiresAt) })}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {!isEditing && (
+                          <div className="flex items-center gap-1">
+                            {!isActiveProvider && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => moveProviderAccountToFront(account.id)}
+                                className="gap-1 h-7 text-xs"
+                              >
+                                <Check className="h-3 w-3" />
+                                {t('accounts.claudeCode.setActive')}
+                              </Button>
+                            )}
+                            <Button
+                              variant={authState?.isAuthenticated ? 'ghost' : 'outline'}
+                              size={authState?.isAuthenticated ? 'icon' : 'sm'}
+                              onClick={() => handleKimiLogin(account.id)}
+                              disabled={isBusy}
+                              className={cn(authState?.isAuthenticated ? 'h-7 w-7 text-muted-foreground hover:text-foreground' : 'gap-1 h-7 text-xs')}
+                            >
+                              {isBusy ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : authState?.isAuthenticated ? (
+                                <RefreshCw className="h-3 w-3" />
+                              ) : (
+                                <>
+                                  <LogIn className="h-3 w-3" />
+                                  {!authState?.isAuthenticated && t('accounts.kimiCode.authenticate')}
+                                </>
+                              )}
+                            </Button>
+                            {authState?.isAuthenticated && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleKimiLogout(account.id)}
+                                disabled={isBusy}
+                                className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => startEditingKimiAccount(account)}
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteKimiAccount(account.id)}
+                              disabled={deletingKimiAccountId === account.id}
+                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              {deletingKimiAccountId === account.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder={t('accounts.kimiCode.accountNamePlaceholder')}
+                  value={newKimiAccountName}
+                  onChange={(e) => setNewKimiAccountName(e.target.value)}
+                  className="flex-1 h-8 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newKimiAccountName.trim()) {
+                      handleAddKimiAccount();
+                    }
+                  }}
+                />
+                <Button
+                  onClick={handleAddKimiAccount}
+                  disabled={!newKimiAccountName.trim() || isAddingKimiAccount}
+                  size="sm"
+                  className="gap-1 shrink-0"
+                >
+                  {isAddingKimiAccount ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
                     <Plus className="h-3 w-3" />

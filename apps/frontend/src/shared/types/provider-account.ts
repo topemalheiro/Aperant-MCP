@@ -5,7 +5,8 @@ export type BuiltinProvider =
   | 'openrouter'
   | 'groq'
   | 'zai'
-  | 'minimax';
+  | 'minimax'
+  | 'kimi';
 
 export type BillingModel = 'subscription' | 'pay-per-use';
 

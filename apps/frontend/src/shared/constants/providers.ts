@@ -28,4 +28,10 @@ export const PROVIDER_REGISTRY: ProviderInfo[] = [
     description: 'Custom Anthropic-compatible API endpoints with API keys.',
     authMethods: ['api-key'],
   },
+  {
+    id: 'kimi',
+    name: 'Kimi Code',
+    description: 'Kimi Code subscription authenticated through browser OAuth.',
+    authMethods: ['oauth'],
+  },
 ];

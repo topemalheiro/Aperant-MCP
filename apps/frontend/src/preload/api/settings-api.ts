@@ -4,6 +4,7 @@ import type {
   AppSettings,
   CodexAuthState,
   IPCResult,
+  KimiAuthState,
   ProviderAccount,
   ProviderAccountsPayload,
   SourceEnvConfig,
@@ -38,6 +39,11 @@ export interface SettingsAPI {
   codexAuthLogin: (accountId: string) => Promise<IPCResult<CodexAuthState>>;
   codexAuthStatus: (accountId: string) => Promise<IPCResult<CodexAuthState>>;
   codexAuthLogout: (accountId: string) => Promise<IPCResult>;
+
+  // Kimi Code OAuth
+  kimiAuthLogin: (accountId: string) => Promise<IPCResult<KimiAuthState>>;
+  kimiAuthStatus: (accountId: string) => Promise<IPCResult<KimiAuthState>>;
+  kimiAuthLogout: (accountId: string) => Promise<IPCResult>;
 
   // App Info
   getAppVersion: () => Promise<string>;
@@ -110,6 +116,16 @@ export const createSettingsAPI = (): SettingsAPI => ({
 
   codexAuthLogout: (accountId: string): Promise<IPCResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.CODEX_AUTH_LOGOUT, accountId),
+
+  // Kimi Code OAuth
+  kimiAuthLogin: (accountId: string): Promise<IPCResult<KimiAuthState>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.KIMI_AUTH_LOGIN, accountId),
+
+  kimiAuthStatus: (accountId: string): Promise<IPCResult<KimiAuthState>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.KIMI_AUTH_STATUS, accountId),
+
+  kimiAuthLogout: (accountId: string): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.KIMI_AUTH_LOGOUT, accountId),
 
   // App Info
   getAppVersion: (): Promise<string> =>

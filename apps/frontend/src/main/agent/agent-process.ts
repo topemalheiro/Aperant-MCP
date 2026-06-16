@@ -30,6 +30,7 @@ import { killProcessGracefully, isWindows } from '../platform';
 import { tmpdir } from 'os';
 import { debugLog } from '../../shared/utils/debug-logger';
 import { prepareCodexCliHome } from '../codex-auth/codex-oauth';
+import { ensureValidKimiToken } from '../kimi-auth/kimi-oauth';
 import { resolveCodexCli } from '../codex-cli-resolver';
 
 // ─── PID file helpers (for cross-process kill from MCP server) ─────────────
@@ -761,6 +762,23 @@ export class AgentProcessManager {
             ANTHROPIC_DEFAULT_OPUS_MODEL: '',
           };
           resolvedProviderType = 'openai';
+        } else if (providerAccount?.provider === 'kimi') {
+          const accessToken = await ensureValidKimiToken(providerAccount.id);
+          if (!accessToken) {
+            throw new Error(`Kimi account "${providerAccount.name}" is not authenticated or the token has expired.`);
+          }
+          apiProfileEnv = {
+            ANTHROPIC_BASE_URL: 'https://api.kimi.com/coding/',
+            ANTHROPIC_AUTH_TOKEN: accessToken,
+            ANTHROPIC_MODEL: 'kimi-for-coding',
+            ANTHROPIC_DEFAULT_HAIKU_MODEL: 'kimi-for-coding',
+            ANTHROPIC_DEFAULT_SONNET_MODEL: 'kimi-for-coding',
+            ANTHROPIC_DEFAULT_OPUS_MODEL: 'kimi-for-coding',
+            CLAUDE_CODE_OAUTH_TOKEN: '',
+            CLAUDE_CONFIG_DIR: '',
+            ANTHROPIC_API_KEY: '',
+          };
+          resolvedProviderType = 'kimi';
         } else {
           apiProfileEnv = await getAPIProfileEnvById(resolvedProviderId);
           resolvedProviderType = 'legacy-api-profile';
