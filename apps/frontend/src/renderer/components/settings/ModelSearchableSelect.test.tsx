@@ -380,4 +380,58 @@ describe('ModelSearchableSelect', () => {
       expect(screen.queryByText('Claude Sonnet 4.5')).not.toBeInTheDocument();
     });
   });
+
+  it('should clear stale models when baseUrl changes', async () => {
+    mockDiscoverModels
+      .mockResolvedValueOnce([
+        { id: 'MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' }
+      ])
+      .mockResolvedValueOnce([
+        { id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5' }
+      ]);
+
+    const { rerender } = render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.minimax.io/anthropic"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    // Open dropdown for MiniMax
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('MiniMax M2.5 Highspeed')).toBeInTheDocument();
+    });
+
+    // Switch to Anthropic baseUrl
+    rerender(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.anthropic.com"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    // Old MiniMax model should no longer be rendered, even before the new fetch completes
+    await waitFor(() => {
+      expect(screen.queryByText('MiniMax M2.5 Highspeed')).not.toBeInTheDocument();
+    });
+
+    // Focus again to trigger fetch for the new provider
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
+      expect(mockDiscoverModels).toHaveBeenLastCalledWith(
+        'https://api.anthropic.com',
+        'sk-test-key-12chars',
+        expect.any(AbortSignal)
+      );
+    });
+  });
 });

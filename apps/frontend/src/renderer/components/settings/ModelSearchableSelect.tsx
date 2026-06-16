@@ -276,7 +276,13 @@ export function ModelSearchableSelect({
 
   // Reset model list when baseUrl or apiKey changes so switching presets
   // doesn't leave stale models (e.g., MiniMax models showing for Anthropic).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: baseUrl/apiKey are props and intentional dependencies
   useEffect(() => {
+    // Abort any in-flight discovery request for the previous provider
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    // Close the dropdown and wipe all discovery state
+    setIsOpen(false);
     setModels([]);
     setSearchQuery('');
     setError(null);

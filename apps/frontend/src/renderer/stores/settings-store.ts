@@ -41,6 +41,7 @@ interface SettingsState {
   setActiveProfile: (profileId: string | null) => Promise<boolean>;
   testConnection: (baseUrl: string, apiKey: string, signal?: AbortSignal) => Promise<TestConnectionResult | null>;
   discoverModels: (baseUrl: string, apiKey: string, signal?: AbortSignal) => Promise<ModelInfo[] | null>;
+  clearDiscoveredModels: () => void;
 
   // Onboarding actions
   resetOnboarding: () => Promise<boolean>;
@@ -253,6 +254,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       });
       return errorResult;
     }
+  },
+
+  clearDiscoveredModels: () => {
+    set({ discoveredModels: new Map<string, ModelInfo[]>() });
   },
 
   discoverModels: async (baseUrl: string, apiKey: string, signal?: AbortSignal): Promise<ModelInfo[] | null> => {

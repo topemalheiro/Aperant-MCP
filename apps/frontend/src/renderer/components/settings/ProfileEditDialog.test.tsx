@@ -328,6 +328,51 @@ describe('ProfileEditDialog - Create Mode', () => {
       expect(screen.getByLabelText(/base url/i)).toHaveFocus();
     });
   });
+
+  it('should clear API key and model fields when switching presets', async () => {
+    const mockClearDiscoveredModels = vi.fn();
+    const mockDiscoverModels = vi.fn().mockResolvedValue([
+      { id: 'MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' }
+    ]);
+    (useSettingsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      saveProfile: vi.fn().mockResolvedValue(true),
+      profilesLoading: false,
+      profilesError: null,
+      discoverModels: mockDiscoverModels,
+      clearDiscoveredModels: mockClearDiscoveredModels
+    });
+
+    render(
+      <ProfileEditDialog
+        open={true}
+        onOpenChange={mockOnOpenChange}
+      />
+    );
+
+    // Select MiniMax preset
+    const presetTrigger = screen.getByLabelText(/preset/i);
+    fireEvent.keyDown(presetTrigger, { key: 'ArrowDown', code: 'ArrowDown' });
+    const minimaxOption = await screen.findByRole('option', { name: 'MiniMax' });
+    fireEvent.click(minimaxOption);
+
+    // Enter API key and confirm default model is populated
+    const apiKeyInput = screen.getByLabelText(/api key/i);
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-minimax-test-key-12345' } });
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('MiniMax-M2.5-highspeed')).toBeInTheDocument();
+    });
+
+    // Switch to Anthropic preset
+    fireEvent.keyDown(presetTrigger, { key: 'ArrowDown', code: 'ArrowDown' });
+    const anthropicOption = await screen.findByRole('option', { name: 'Anthropic' });
+    fireEvent.click(anthropicOption);
+
+    // API key and MiniMax default model should be cleared
+    await waitFor(() => {
+      expect(screen.getByLabelText(/api key/i)).toHaveValue('');
+      expect(screen.queryByDisplayValue('MiniMax-M2.5-highspeed')).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe('ProfileEditDialog - Validation', () => {

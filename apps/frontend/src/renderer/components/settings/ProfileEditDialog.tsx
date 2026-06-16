@@ -56,7 +56,8 @@ export function ProfileEditDialog({ open, onOpenChange, onSaved, profile }: Prof
     profilesError,
     testConnection,
     isTestingConnection,
-    testConnectionResult
+    testConnectionResult,
+    clearDiscoveredModels
   } = useSettingsStore();
   const { toast } = useToast();
 
@@ -107,6 +108,14 @@ export function ProfileEditDialog({ open, onOpenChange, onSaved, profile }: Prof
     };
   }, []);
 
+  // Clear the global model discovery cache when the dialog closes so stale
+  // provider models do not leak into the next profile create/edit session.
+  useEffect(() => {
+    if (!open) {
+      clearDiscoveredModels();
+    }
+  }, [open, clearDiscoveredModels]);
+
   // Reset form and pre-populate when dialog opens
   // Note: Only reset when dialog opens/closes, not when profile prop changes
   // This prevents race conditions if user rapidly clicks edit on different profiles
@@ -150,12 +159,16 @@ export function ProfileEditDialog({ open, onOpenChange, onSaved, profile }: Prof
     if (!preset) return;
     setPresetId(id);
     setBaseUrl(preset.baseUrl);
+    // Presets represent different providers: clear credentials and model mappings
+    // from the previous provider so they do not leak into the new preset.
+    setApiKey('');
+    setIsChangingApiKey(true);
+    setDefaultModel(preset.defaultModel ?? '');
+    setHaikuModel('');
+    setSonnetModel('');
+    setOpusModel('');
     if (!name.trim()) {
       setName(t(preset.labelKey));
-    }
-    // Set default model from preset if available
-    if (preset.defaultModel) {
-      setDefaultModel(preset.defaultModel);
     }
   };
 
