@@ -621,7 +621,14 @@
       "tokenPlaceholder": "sk-ant-oat01-...",
       "emailPlaceholder": "Email (optionnel, pour l'affichage)",
       "saveToken": "Enregistrer le token",
-      "accountNamePlaceholder": "Nom du compte (ex: Travail, Personnel)"
+      "accountNamePlaceholder": "Nom du compte (ex: Travail, Personnel)",
+      "dialog": {
+        "deleteTitle": "Supprimer le compte Claude Code",
+        "deleteDescription": "Êtes-vous sûr de vouloir supprimer \"{{name}}\" ? Cette action est irréversible.",
+        "cancel": "Annuler",
+        "delete": "Supprimer",
+        "deleting": "Suppression..."
+      }
     },
     "openaiCodex": {
       "description": "Authentifiez-vous nativement avec votre compte OpenAI pour Codex.",

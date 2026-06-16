@@ -128,6 +128,7 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editApiProfile, setEditApiProfile] = useState<APIProfile | null>(null);
   const [deleteConfirmProfile, setDeleteConfirmProfile] = useState<APIProfile | null>(null);
+  const [deleteConfirmClaudeProfile, setDeleteConfirmClaudeProfile] = useState<ClaudeProfile | null>(null);
   const [isDeletingApiProfile, setIsDeletingApiProfile] = useState(false);
   const [isSettingActiveApiProfile, setIsSettingActiveApiProfile] = useState(false);
 
@@ -486,11 +487,15 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
     }
   };
 
-  const handleDeleteClaudeProfile = async (profileId: string) => {
+  const handleDeleteClaudeProfile = async () => {
+    if (!deleteConfirmClaudeProfile) return;
+
+    const profileId = deleteConfirmClaudeProfile.id;
     setDeletingProfileId(profileId);
     try {
       const result = await window.electronAPI.deleteClaudeProfile(profileId);
       if (result.success) {
+        setDeleteConfirmClaudeProfile(null);
         await loadClaudeProfiles();
       } else {
         toast({
@@ -1287,26 +1292,24 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
                               </TooltipTrigger>
                               <TooltipContent>{tCommon('accessibility.renameProfileAriaLabel')}</TooltipContent>
                             </Tooltip>
-                            {!profile.isDefault && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteClaudeProfile(profile.id)}
-                                    disabled={deletingProfileId === profile.id}
-                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  >
-                                    {deletingProfileId === profile.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>{tCommon('accessibility.deleteProfileAriaLabel')}</TooltipContent>
-                              </Tooltip>
-                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeleteConfirmClaudeProfile(profile)}
+                                  disabled={deletingProfileId === profile.id}
+                                  className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  {deletingProfileId === profile.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{tCommon('accessibility.deleteProfileAriaLabel')}</TooltipContent>
+                            </Tooltip>
                           </div>
                         )}
                       </div>
@@ -1887,6 +1890,37 @@ export function AccountSettings({ settings, onSettingsChange, isOpen }: AccountS
                       {isDeletingApiProfile
                         ? t('accounts.customEndpoints.dialog.deleting')
                         : t('accounts.customEndpoints.dialog.delete')}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Claude Code Delete Confirmation Dialog */}
+              <AlertDialog
+                open={deleteConfirmClaudeProfile !== null}
+                onOpenChange={() => setDeleteConfirmClaudeProfile(null)}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t('accounts.claudeCode.dialog.deleteTitle')}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t('accounts.claudeCode.dialog.deleteDescription', {
+                        name: deleteConfirmClaudeProfile?.name ?? ''
+                      })}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deletingProfileId !== null}>
+                      {t('accounts.claudeCode.dialog.cancel')}
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteClaudeProfile}
+                      disabled={deletingProfileId !== null}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deletingProfileId !== null
+                        ? t('accounts.claudeCode.dialog.deleting')
+                        : t('accounts.claudeCode.dialog.delete')}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

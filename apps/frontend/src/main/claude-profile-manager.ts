@@ -377,7 +377,9 @@ export class ClaudeProfileManager {
   }
 
   /**
-   * Delete a profile (cannot delete default or last profile)
+   * Delete a profile. Any profile can be deleted, including the default or last
+   * remaining one, so that users can fully remove Claude Code accounts from the
+   * Accounts settings page.
    */
   deleteProfile(profileId: string): boolean {
     const profile = this.getProfile(profileId);
@@ -385,23 +387,20 @@ export class ClaudeProfileManager {
       return false;
     }
 
-    // Cannot delete default profile
-    if (profile.isDefault) {
-      return false;
-    }
-
-    // Cannot delete if it's the only profile
-    if (this.data.profiles.length <= 1) {
-      return false;
-    }
-
     // Remove the profile
-    this.data.profiles = this.data.profiles.filter(p => p.id !== profileId);
+    const remainingProfiles = this.data.profiles.filter(p => p.id !== profileId);
 
-    // If we deleted the active profile, switch to default
+    // If we deleted the default profile, promote the first remaining profile
+    if (profile.isDefault && remainingProfiles.length > 0) {
+      remainingProfiles[0].isDefault = true;
+    }
+
+    this.data.profiles = remainingProfiles;
+
+    // If we deleted the active profile, switch to the new default or clear it
     if (this.data.activeProfileId === profileId) {
-      const defaultProfile = this.data.profiles.find(p => p.isDefault);
-      this.data.activeProfileId = defaultProfile?.id || this.data.profiles[0].id;
+      const defaultProfile = remainingProfiles.find(p => p.isDefault);
+      this.data.activeProfileId = defaultProfile?.id || remainingProfiles[0]?.id || null;
     }
 
     this.save();

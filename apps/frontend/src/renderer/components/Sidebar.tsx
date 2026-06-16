@@ -58,7 +58,6 @@ import {
 import { AddProjectModal } from './AddProjectModal';
 import { GitSetupModal } from './GitSetupModal';
 import { RateLimitIndicator } from './RateLimitIndicator';
-import { ClaudeCodeStatusBadge } from './ClaudeCodeStatusBadge';
 import { UpdateBanner } from './UpdateBanner';
 import { AutoShutdownToggle } from './AutoShutdownToggle';
 import type { Project, AutoBuildVersionInfo, GitStatus, ProjectEnvConfig } from '../../shared/types';
@@ -466,9 +465,6 @@ export function Sidebar({
 
         {/* Bottom section with Settings, Help, and New Task */}
         <div className={cn("space-y-3 transition-all duration-300", isCollapsed ? "p-2" : "p-4")}>
-          {/* Claude Code Status Badge */}
-          {!isCollapsed && <ClaudeCodeStatusBadge />}
-
           {/* Auto Shutdown Toggle */}
           <AutoShutdownToggle isCollapsed={isCollapsed} />
 
