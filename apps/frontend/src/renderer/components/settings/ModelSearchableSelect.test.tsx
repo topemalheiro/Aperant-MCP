@@ -434,4 +434,63 @@ describe('ModelSearchableSelect', () => {
       );
     });
   });
+
+  it('should not inject hardcoded MiniMax into OpenRouter results', async () => {
+    mockDiscoverModels.mockResolvedValue([
+      { id: 'openai/gpt-4o', display_name: 'GPT-4o' },
+      { id: 'anthropic/claude-3.5-sonnet', display_name: 'Claude 3.5 Sonnet' }
+    ]);
+
+    render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://openrouter.ai/api"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('GPT-4o')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('MiniMax M2.5 Highspeed')).not.toBeInTheDocument();
+    expect(screen.queryByText('minimax/MiniMax-M2.5-highspeed')).not.toBeInTheDocument();
+  });
+
+  it('should retry discovery on open after a previous failure', async () => {
+    mockDiscoverModels
+      .mockRejectedValueOnce(new Error('This API endpoint does not support model listing'))
+      .mockResolvedValueOnce([
+        { id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5' }
+      ]);
+
+    render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.anthropic.com"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+
+    // First open fails
+    fireEvent.focus(input);
+    await waitFor(() => {
+      expect(screen.getByText(/Model discovery not available/)).toBeInTheDocument();
+    });
+
+    // Second open retries and succeeds
+    fireEvent.blur(input);
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
+    });
+  });
 });

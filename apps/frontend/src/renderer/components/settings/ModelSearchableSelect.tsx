@@ -31,9 +31,6 @@ import type { ModelInfo } from '@shared/types/profile';
  * Kimi (Moonshot) API is OpenAI-compatible; provide known model IDs.
  */
 const ADDITIONAL_MODELS: Record<string, ModelInfo[]> = {
-  'https://openrouter.ai/api': [
-    { id: 'minimax/MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' },
-  ],
   'https://api.minimax.io/anthropic': [
     { id: 'MiniMax-M2.1-highspeed', display_name: 'MiniMax M2.1 Highspeed' },
     { id: 'MiniMax-M2.5', display_name: 'MiniMax M2.5' },
@@ -178,39 +175,27 @@ export function ModelSearchableSelect({
   /**
    * Handle dropdown open.
    * Triggers model fetch on first open.
-   * If model discovery is not supported but we have hardcoded models, show those.
+   * Retries discovery on every open so transient failures or populated caches
+   * from sibling fields are used instead of permanently locking into manual mode.
    */
   const handleOpen = () => {
     if (disabled) return;
 
-    // If we already have models (including hardcoded ones), open dropdown
+    // If we already have models, just open the dropdown
     if (models.length > 0) {
       setIsOpen(true);
       setSearchQuery('');
       return;
     }
 
-    // If model discovery is not supported but we have hardcoded models for this URL, use them
-    const normalizedUrl = baseUrl.replace(/\/$/, '');
-    const extra = ADDITIONAL_MODELS[normalizedUrl];
-    if (modelDiscoveryNotSupported && extra && extra.length > 0) {
-      setModels(extra);
-      setIsOpen(true);
-      setSearchQuery('');
-      return;
-    }
-
-    // If we already know model discovery isn't supported and no hardcoded models, don't open dropdown
-    if (modelDiscoveryNotSupported) {
-      setIsManualInput(true);
-      return;
-    }
-
+    // Open dropdown and attempt to fetch models. The store cache may already
+    // contain results from another field, or a previous transient failure may
+    // now succeed.
     setIsOpen(true);
     setSearchQuery('');
+    setIsManualInput(false);
 
-    // Fetch models on first open
-    if (models.length === 0 && !isLoading && !error) {
+    if (!isLoading && !error) {
       fetchModels();
     }
   };
@@ -300,18 +285,15 @@ export function ModelSearchableSelect({
             handleManualInputChange(e.target.value);
           }}
           onFocus={() => {
-            // Open dropdown if we have models or hardcoded models for this URL
-            const normalizedUrl = baseUrl.replace(/\/$/, '');
-            const hasHardcodedModels = !!ADDITIONAL_MODELS[normalizedUrl];
-            if (models.length > 0 || hasHardcodedModels || !modelDiscoveryNotSupported) {
-              handleOpen();
-            }
+            // Always attempt to open; handleOpen will retry discovery if needed
+            handleOpen();
           }}
           placeholder={
-            // Show normal placeholder if we have models (including hardcoded ones)
-            models.length > 0 || !modelDiscoveryNotSupported
-              ? resolvedPlaceholder
-              : t('settings:modelSelect.placeholderManual')
+            // Show manual placeholder only when we have confirmed discovery is
+            // unsupported and have no models to display.
+            modelDiscoveryNotSupported && models.length === 0
+              ? t('settings:modelSelect.placeholderManual')
+              : resolvedPlaceholder
           }
           disabled={disabled}
           className="pr-10"
@@ -320,7 +302,7 @@ export function ModelSearchableSelect({
         <div className="absolute right-0 top-0 h-full flex items-center px-3">
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (models.length > 0 || !modelDiscoveryNotSupported) ? (
+          ) : (
             <Button
               type="button"
               variant="ghost"
@@ -331,7 +313,7 @@ export function ModelSearchableSelect({
             >
               <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
             </Button>
-          ) : null}
+          )}
         </div>
       </div>
 
