@@ -177,7 +177,10 @@
     "placeholderManual": "Saisir le nom du modèle (ex. : claude-sonnet-4-5-20250929)",
     "searchPlaceholder": "Rechercher des modèles...",
     "noResults": "Aucun modèle ne correspond à votre recherche",
-    "discoveryNotAvailable": "Découverte de modèles indisponible. Saisissez le nom du modèle manuellement."
+    "discoveryNotAvailable": "Découverte de modèles indisponible. Saisissez le nom du modèle manuellement.",
+    "authError": "Impossible de s'authentifier auprès du fournisseur. Vérifiez votre clé API.",
+    "networkError": "Impossible de joindre le fournisseur. Utilisation de la liste de modèles connus.",
+    "timeoutError": "Le fournisseur met trop de temps à répondre. Utilisation de la liste de modèles connus."
   },
   "language": {
     "label": "Langue de l'interface",

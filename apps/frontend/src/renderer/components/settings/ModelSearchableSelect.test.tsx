@@ -258,7 +258,7 @@ describe('ModelSearchableSelect', () => {
     });
   });
 
-  it('should close dropdown when no models returned', async () => {
+  it('should use preset models when discovery returns empty', async () => {
     mockDiscoverModels.mockResolvedValue([]);
 
     render(
@@ -274,8 +274,8 @@ describe('ModelSearchableSelect', () => {
     fireEvent.focus(input);
 
     await waitFor(() => {
-      // Component closes dropdown when no models, dropdown should not be visible
-      expect(screen.queryByPlaceholderText('Search models...')).not.toBeInTheDocument();
+      // Preset Anthropic models should still appear
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
     });
   });
 
@@ -463,7 +463,7 @@ describe('ModelSearchableSelect', () => {
 
   it('should retry discovery on open after a previous failure', async () => {
     mockDiscoverModels
-      .mockRejectedValueOnce(new Error('This API endpoint does not support model listing'))
+      .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce([
         { id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5' }
       ]);
@@ -479,10 +479,10 @@ describe('ModelSearchableSelect', () => {
 
     const input = screen.getByPlaceholderText('Select a model or type manually');
 
-    // First open fails
+    // First open fails but preset fallback models are still shown
     fireEvent.focus(input);
     await waitFor(() => {
-      expect(screen.getByText(/Model discovery not available/)).toBeInTheDocument();
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
     });
 
     // Second open retries and succeeds
@@ -492,5 +492,76 @@ describe('ModelSearchableSelect', () => {
     await waitFor(() => {
       expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
     });
+  });
+
+  it('should merge discovered models with preset models', async () => {
+    mockDiscoverModels.mockResolvedValue([
+      { id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5' }
+    ]);
+
+    render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.anthropic.com"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
+      // Preset model not returned by discovery should also appear
+      expect(screen.getByText('Claude Opus 4.5')).toBeInTheDocument();
+    });
+  });
+
+  it('should show preset models when discovery fails for a known preset', async () => {
+    const authError = new Error('Authentication failed. Please check your API key.');
+    (authError as Error & { errorType?: string }).errorType = 'auth';
+    mockDiscoverModels.mockRejectedValue(authError);
+
+    render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.groq.com/openai/v1"
+        apiKey="sk-test-key-12chars"
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      // Preset Groq models appear despite discovery failure
+      expect(screen.getByText('Llama 3.3 70B Versatile')).toBeInTheDocument();
+      // Auth error is surfaced to the user
+      expect(screen.getByText(/Could not authenticate/)).toBeInTheDocument();
+    });
+  });
+
+  it('should show preset models immediately when apiKey is empty', async () => {
+    render(
+      <ModelSearchableSelect
+        value=""
+        onChange={mockOnChange}
+        baseUrl="https://api.anthropic.com"
+        apiKey=""
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Select a model or type manually');
+    fireEvent.focus(input);
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude Sonnet 4.5')).toBeInTheDocument();
+      expect(screen.getByText('Claude Opus 4.5')).toBeInTheDocument();
+    });
+
+    // Backend should not be called when no key is entered
+    expect(mockDiscoverModels).not.toHaveBeenCalled();
   });
 });

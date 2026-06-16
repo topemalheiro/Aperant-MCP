@@ -774,8 +774,17 @@ describe('profile-service', () => {
     it('should throw not_supported error for 404 response', async () => {
       mockModelsList.mockRejectedValue(createMockError('NotFoundError', 'Not Found'));
 
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'Not Found' })
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
       const error = await discoverModels('https://custom-api.com', 'sk-test-key-12345678')
         .catch(e => e);
+
+      vi.unstubAllGlobals();
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error & { errorType?: string }).errorType).toBe('not_supported');
@@ -787,6 +796,84 @@ describe('profile-service', () => {
       const result = await discoverModels('api.anthropic.com', 'sk-test-key-12chars');
 
       expect(result).toEqual({ models: [] });
+    });
+
+    it('should fall back to OpenAI-compatible fetch when Anthropic SDK returns 404', async () => {
+      mockModelsList.mockRejectedValue(createMockError('NotFoundError', 'Not Found'));
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'openai/gpt-4o', name: 'GPT-4o' },
+            { id: 'anthropic/claude-3.5-sonnet' }
+          ]
+        })
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await discoverModels('https://openrouter.ai/api', 'sk-test-key-12345678');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://openrouter.ai/api/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer sk-test-key-12345678'
+          })
+        })
+      );
+      expect(result).toEqual({
+        models: [
+          { id: 'openai/gpt-4o', display_name: 'GPT-4o' },
+          { id: 'anthropic/claude-3.5-sonnet', display_name: 'anthropic/claude-3.5-sonnet' }
+        ]
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it('should fall back to OpenAI-compatible fetch on any SDK error, not just 404', async () => {
+      mockModelsList.mockRejectedValue(createMockError('AuthenticationError', 'Unauthorized'));
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B' }
+          ]
+        })
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await discoverModels('https://api.groq.com/openai/v1', 'sk-test-key-12345678');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.groq.com/openai/v1/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer sk-test-key-12345678'
+          })
+        })
+      );
+      expect(result).toEqual({
+        models: [
+          { id: 'llama-3.3-70b-versatile', display_name: 'Llama 3.3 70B' }
+        ]
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it('should not throw ReferenceError when SDK error has an unknown name', async () => {
+      mockModelsList.mockRejectedValue(createMockError('UnknownSDKError', 'Something weird happened'));
+
+      const error = await discoverModels('https://api.anthropic.com', 'sk-test-key-12345678')
+        .catch(e => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error & { errorType?: string }).errorType).toBe('unknown');
     });
   });
 });

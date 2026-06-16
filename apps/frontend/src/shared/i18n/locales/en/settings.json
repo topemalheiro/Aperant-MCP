@@ -177,7 +177,10 @@
     "placeholderManual": "Enter model name (e.g., claude-sonnet-4-5-20250929)",
     "searchPlaceholder": "Search models...",
     "noResults": "No models match your search",
-    "discoveryNotAvailable": "Model discovery not available. Enter model name manually."
+    "discoveryNotAvailable": "Model discovery not available. Enter model name manually.",
+    "authError": "Could not authenticate with the provider. Check your API key.",
+    "networkError": "Could not reach the provider. Using known model list.",
+    "timeoutError": "The provider took too long to respond. Using known model list."
   },
   "language": {
     "label": "Interface Language",

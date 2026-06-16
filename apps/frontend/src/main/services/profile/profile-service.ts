@@ -276,24 +276,15 @@ export async function getAPIProfileEnv(): Promise<Record<string, string>> {
   const envVars: Record<string, string> = {
     ANTHROPIC_BASE_URL: profile.baseUrl || '',
     ANTHROPIC_AUTH_TOKEN: profile.apiKey || '',
-    ANTHROPIC_API_KEY: profile.apiKey || '',
     ANTHROPIC_MODEL: profile.models?.default || '',
     ANTHROPIC_DEFAULT_HAIKU_MODEL: profile.models?.haiku || '',
     ANTHROPIC_DEFAULT_SONNET_MODEL: profile.models?.sonnet || '',
-    ANTHROPIC_DEFAULT_OPUS_MODEL: profile.models?.opus || '',
-    // Clear OAuth token so SDK uses the API key instead of OAuth
-    CLAUDE_CODE_OAUTH_TOKEN: '',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: profile.models?.opus || ''
   };
 
   // Filter out empty/whitespace string values (only set env vars that have values)
-  // EXCEPT CLAUDE_CODE_OAUTH_TOKEN which MUST be empty to override OAuth mode
   const filteredEnvVars: Record<string, string> = {};
   for (const [key, value] of Object.entries(envVars)) {
-    // Always keep CLAUDE_CODE_OAUTH_TOKEN (even empty) to clear OAuth credentials
-    if (key === 'CLAUDE_CODE_OAUTH_TOKEN') {
-      filteredEnvVars[key] = '';
-      continue;
-    }
     const trimmedValue = value?.trim();
     if (trimmedValue && trimmedValue !== '') {
       filteredEnvVars[key] = trimmedValue;
@@ -320,22 +311,15 @@ export async function getAPIProfileEnvById(profileId: string): Promise<Record<st
   const envVars: Record<string, string> = {
     ANTHROPIC_BASE_URL: profile.baseUrl || '',
     ANTHROPIC_AUTH_TOKEN: profile.apiKey || '',
-    ANTHROPIC_API_KEY: profile.apiKey || '',
     ANTHROPIC_MODEL: profile.models?.default || '',
     ANTHROPIC_DEFAULT_HAIKU_MODEL: profile.models?.haiku || '',
     ANTHROPIC_DEFAULT_SONNET_MODEL: profile.models?.sonnet || '',
-    ANTHROPIC_DEFAULT_OPUS_MODEL: profile.models?.opus || '',
-    // Clear OAuth token so SDK uses the API key instead of OAuth
-    CLAUDE_CODE_OAUTH_TOKEN: '',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: profile.models?.opus || ''
   };
 
-  // Filter out empty values EXCEPT CLAUDE_CODE_OAUTH_TOKEN which must be empty to clear OAuth
+  // Filter out empty/whitespace string values (only set env vars that have values)
   const filteredEnvVars: Record<string, string> = {};
   for (const [key, value] of Object.entries(envVars)) {
-    if (key === 'CLAUDE_CODE_OAUTH_TOKEN') {
-      filteredEnvVars[key] = '';
-      continue;
-    }
     const trimmedValue = value?.trim();
     if (trimmedValue && trimmedValue !== '') {
       filteredEnvVars[key] = trimmedValue;
@@ -645,37 +629,73 @@ export async function discoverModels(
     console.log('[discoverModels] Parsed models:', models.slice(0, 5).map(m => m.id));
 
     return { models };
-  } catch (error) {
+  } catch (sdkError) {
+    // Many providers (OpenRouter, Groq, etc.) expose /v1/models using the
+    // OpenAI format but reject the Anthropic SDK's headers. Try a plain
+    // fetch with OpenAI-compatible Authorization on any SDK failure so these
+    // providers still populate the model dropdown.
+    try {
+      console.log('[discoverModels] Anthropic SDK failed, trying OpenAI-compatible fetch...');
+      const fetchResponse = await fetch(`${normalizedUrl}/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal: signal ?? undefined
+      });
+
+      if (!fetchResponse.ok) {
+        throw new Error(`HTTP ${fetchResponse.status}`);
+      }
+
+      const data = await fetchResponse.json() as { data?: Array<{ id?: string; name?: string }> };
+      const openAiModels: ModelInfo[] = (data.data || [])
+        .map((model) => ({
+          id: model.id || '',
+          display_name: model.name || model.id || ''
+        }))
+        .filter((model) => model.id.length > 0);
+
+      if (openAiModels.length > 0) {
+        console.log('[discoverModels] OpenAI-compatible fetch parsed models:', openAiModels.slice(0, 5).map(m => m.id));
+        return { models: openAiModels };
+      }
+    } catch (fetchError) {
+      console.log('[discoverModels] OpenAI-compatible fetch failed:', fetchError instanceof Error ? fetchError.message : String(fetchError));
+      // Fall through to original error handling below
+    }
+
     // Log detailed error info for debugging
     console.error('[discoverModels] Error details:', {
-      error: error instanceof Error ? error.message : String(error),
-      errorName: error instanceof Error ? error.name : 'unknown',
+      error: sdkError instanceof Error ? sdkError.message : String(sdkError),
+      errorName: sdkError instanceof Error ? sdkError.name : 'unknown',
       baseUrl: normalizedUrl,
       apiKeyPrefix: apiKey.substring(0, 10) + '...'
     });
     // Map SDK errors to thrown errors with errorType property
     // Use error.name for instanceof-like checks (works with mocks that set this.name)
-    const errorName = error instanceof Error ? error.name : '';
+    const errorName = sdkError instanceof Error ? sdkError.name : '';
 
-    if (errorName === 'AuthenticationError' || error instanceof AuthenticationError) {
+    if (errorName === 'AuthenticationError' || sdkError instanceof AuthenticationError) {
       const authError: Error & { errorType?: string } = new Error('Authentication failed. Please check your API key.');
       authError.errorType = 'auth';
       throw authError;
     }
 
-    if (errorName === 'NotFoundError' || error instanceof NotFoundError) {
+    if (errorName === 'NotFoundError' || sdkError instanceof NotFoundError) {
       const notSupportedError: Error & { errorType?: string } = new Error('This API endpoint does not support model listing. Please enter the model name manually.');
       notSupportedError.errorType = 'not_supported';
       throw notSupportedError;
     }
 
-    if (errorName === 'APIConnectionTimeoutError' || error instanceof APIConnectionTimeoutError) {
+    if (errorName === 'APIConnectionTimeoutError' || sdkError instanceof APIConnectionTimeoutError) {
       const timeoutError: Error & { errorType?: string } = new Error('Connection timeout. The endpoint did not respond.');
       timeoutError.errorType = 'timeout';
       throw timeoutError;
     }
 
-    if (errorName === 'APIConnectionError' || error instanceof APIConnectionError) {
+    if (errorName === 'APIConnectionError' || sdkError instanceof APIConnectionError) {
       const networkError: Error & { errorType?: string } = new Error('Network error. Please check your internet connection.');
       networkError.errorType = 'network';
       throw networkError;

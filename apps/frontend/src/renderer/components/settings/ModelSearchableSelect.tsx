@@ -25,24 +25,73 @@ import { useSettingsStore } from '../../stores/settings-store';
 import type { ModelInfo } from '@shared/types/profile';
 
 /**
- * Additional models to include for specific APIs that don't return all available models.
- * OpenRouter doesn't return MiniMax M2.5 Highspeed in their /v1/models response.
- * MiniMax API may not support model listing, so we provide known models.
- * Kimi (Moonshot) API is OpenAI-compatible; provide known model IDs.
+ * Known models for each API provider preset.
+ *
+ * These are used as a fallback when live discovery fails or as supplementary
+ * entries when discovery succeeds but omits popular models. Keeping them per
+ * preset guarantees the dropdown is never empty because of provider quirks.
  */
-const ADDITIONAL_MODELS: Record<string, ModelInfo[]> = {
+const PRESET_MODELS: Record<string, ModelInfo[]> = {
+  'https://api.anthropic.com': [
+    { id: 'claude-opus-4-5-20251101', display_name: 'Claude Opus 4.5' },
+    { id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5-20251001', display_name: 'Claude Haiku 4.5' },
+    { id: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet' },
+    { id: 'claude-3-opus-20240229', display_name: 'Claude 3 Opus' },
+    { id: 'claude-3-sonnet-20240229', display_name: 'Claude 3 Sonnet' },
+    { id: 'claude-3-haiku-20240307', display_name: 'Claude 3 Haiku' }
+  ],
+  'https://openrouter.ai/api': [
+    { id: 'openai/gpt-4o', display_name: 'OpenAI GPT-4o' },
+    { id: 'openai/gpt-4o-mini', display_name: 'OpenAI GPT-4o Mini' },
+    { id: 'anthropic/claude-3.5-sonnet', display_name: 'Anthropic Claude 3.5 Sonnet' },
+    { id: 'anthropic/claude-3-opus', display_name: 'Anthropic Claude 3 Opus' },
+    { id: 'google/gemini-1.5-pro-latest', display_name: 'Google Gemini 1.5 Pro' },
+    { id: 'meta-llama/llama-3.3-70b-instruct', display_name: 'Meta Llama 3.3 70B' }
+  ],
+  'https://api.groq.com/openai/v1': [
+    { id: 'llama-3.3-70b-versatile', display_name: 'Llama 3.3 70B Versatile' },
+    { id: 'llama-3.1-8b-instant', display_name: 'Llama 3.1 8B Instant' },
+    { id: 'mixtral-8x7b-32768', display_name: 'Mixtral 8x7B' },
+    { id: 'gemma2-9b-it', display_name: 'Gemma 2 9B IT' }
+  ],
+  'https://api.z.ai/api/anthropic': [
+    { id: 'glm-4.5', display_name: 'GLM 4.5' },
+    { id: 'glm-4.5-flash', display_name: 'GLM 4.5 Flash' },
+    { id: 'glm-4.1', display_name: 'GLM 4.1' },
+    { id: 'glm-4.1-flash', display_name: 'GLM 4.1 Flash' },
+    { id: 'glm-4', display_name: 'GLM 4' },
+    { id: 'glm-4-air', display_name: 'GLM 4 Air' },
+    { id: 'glm-4-airx', display_name: 'GLM 4 AirX' },
+    { id: 'glm-4-flash', display_name: 'GLM 4 Flash' }
+  ],
+  'https://open.bigmodel.cn/api/anthropic': [
+    { id: 'glm-4.5', display_name: 'GLM 4.5' },
+    { id: 'glm-4.5-flash', display_name: 'GLM 4.5 Flash' },
+    { id: 'glm-4.1', display_name: 'GLM 4.1' },
+    { id: 'glm-4.1-flash', display_name: 'GLM 4.1 Flash' },
+    { id: 'glm-4', display_name: 'GLM 4' },
+    { id: 'glm-4-air', display_name: 'GLM 4 Air' },
+    { id: 'glm-4-airx', display_name: 'GLM 4 AirX' },
+    { id: 'glm-4-flash', display_name: 'GLM 4 Flash' }
+  ],
   'https://api.minimax.io/anthropic': [
     { id: 'MiniMax-M2.1-highspeed', display_name: 'MiniMax M2.1 Highspeed' },
     { id: 'MiniMax-M2.5', display_name: 'MiniMax M2.5' },
     { id: 'MiniMax-M2.5-highspeed', display_name: 'MiniMax M2.5 Highspeed' },
-    { id: 'MiniMax-M2.7-highspeed', display_name: 'MiniMax M2.7 Highspeed' },
+    { id: 'MiniMax-M2.7-highspeed', display_name: 'MiniMax M2.7 Highspeed' }
   ],
   'https://api.moonshot.cn/v1': [
     { id: 'kimi-k2-5', display_name: 'Kimi K2.5' },
     { id: 'kimi-k2-6', display_name: 'Kimi K2.6' },
-    { id: 'kimi-k2-7', display_name: 'Kimi K2.7' },
-  ],
+    { id: 'kimi-k2-7', display_name: 'Kimi K2.7' }
+  ]
 };
+
+function getPresetModels(baseUrl: string): ModelInfo[] | undefined {
+  const normalizedUrl = baseUrl.replace(/\/+$/, '');
+  return PRESET_MODELS[normalizedUrl];
+}
 
 interface ModelSearchableSelectProps {
   /** Currently selected model ID */
@@ -109,15 +158,44 @@ export function ModelSearchableSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   /**
+   * Merge discovered models with known preset models, deduplicated by id.
+   */
+  const mergeWithPresetModels = (discovered: ModelInfo[], url: string): ModelInfo[] => {
+    const preset = getPresetModels(url);
+    if (!preset || preset.length === 0) {
+      return discovered;
+    }
+    const existingIds = new Set(discovered.map(m => m.id));
+    const additions = preset.filter(m => !existingIds.has(m.id));
+    return additions.length > 0 ? [...discovered, ...additions] : discovered;
+  };
+
+  /**
    * Fetch models from API.
    * Uses store's discoverModels action which has built-in caching.
+   * Falls back to known preset models when discovery fails.
    */
   const fetchModels = async () => {
     console.log('[ModelSearchableSelect] fetchModels called with:', { baseUrl, apiKey: `${apiKey.slice(-4)}` });
-    // Fetch from API
     setIsLoading(true);
     setError(null);
     setModelDiscoveryNotSupported(false);
+
+    // No API key yet — skip the backend call and show preset models immediately
+    // so users can browse a provider's models before typing a key.
+    if (!apiKey.trim()) {
+      const preset = getPresetModels(baseUrl);
+      if (preset && preset.length > 0) {
+        console.log('[ModelSearchableSelect] No API key, using preset models for:', baseUrl);
+        setModels(preset);
+      } else {
+        setModelDiscoveryNotSupported(true);
+        setIsOpen(false);
+      }
+      setIsLoading(false);
+      return;
+    }
+
     abortControllerRef.current = new AbortController();
 
     try {
@@ -125,41 +203,43 @@ export function ModelSearchableSelect({
       console.log('[ModelSearchableSelect] discoverModels result:', result);
 
       if (result && Array.isArray(result)) {
-        setModels(result);
-        // Add extra models for specific APIs (e.g., MiniMax M2.5 Highspeed for OpenRouter)
-        const normalizedUrl = baseUrl.replace(/\/$/, '');
-        const extra = ADDITIONAL_MODELS[normalizedUrl];
-        if (extra) {
-          const existingIds = new Set(result.map(m => m.id));
-          const newModels = extra.filter(m => !existingIds.has(m.id));
-          if (newModels.length > 0) {
-            setModels([...result, ...newModels]);
-          }
-        }
+        // Merge with preset models so popular/known models always appear
+        const merged = mergeWithPresetModels(result, baseUrl);
+        setModels(merged);
       } else {
-        // No result - treat as not supported
-        setModelDiscoveryNotSupported(true);
-        setIsOpen(false);
+        // No result from backend - try preset fallbacks
+        const preset = getPresetModels(baseUrl);
+        if (preset && preset.length > 0) {
+          console.log('[ModelSearchableSelect] Discovery returned no models, using preset fallbacks for:', baseUrl);
+          setModels(preset);
+        } else {
+          setModelDiscoveryNotSupported(true);
+          setIsOpen(false);
+        }
       }
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        // Check if there are hardcoded models for this API - show them even if discovery fails
-        const normalizedUrl = baseUrl.replace(/\/$/, '');
-        const extra = ADDITIONAL_MODELS[normalizedUrl];
-        
-        if (extra && extra.length > 0) {
-          // We have hardcoded models for this API - use them
-          console.log('[ModelSearchableSelect] Using hardcoded models for:', normalizedUrl);
-          setModels(extra);
-          setIsOpen(true);
+        // We always have preset models for supported presets, so show them
+        // and surface a short warning instead of locking the user into manual input.
+        const preset = getPresetModels(baseUrl);
+        if (preset && preset.length > 0) {
+          console.log('[ModelSearchableSelect] Discovery failed, using preset fallbacks for:', baseUrl, err.message);
+          setModels(preset);
+          const errorType = (err as Error & { errorType?: string }).errorType;
+          if (errorType === 'auth') {
+            setError(t('settings:modelSelect.authError'));
+          } else if (errorType === 'network') {
+            setError(t('settings:modelSelect.networkError'));
+          } else if (errorType === 'timeout') {
+            setError(t('settings:modelSelect.timeoutError'));
+          }
         } else {
-          // No hardcoded models - fall back to manual input
+          // No preset fallback - manual input mode
           if (err.message.includes('does not support model listing') ||
-              err.message.includes('not_supported')) {
+              err.message.includes('not_supported') ||
+              (err as Error & { errorType?: string }).errorType === 'not_supported') {
             setModelDiscoveryNotSupported(true);
           } else {
-            // For other errors, also treat as "not supported" for better UX
-            // User can still type manually
             setModelDiscoveryNotSupported(true);
             console.warn('[ModelSearchableSelect] Model discovery failed:', err.message);
           }
@@ -375,7 +455,7 @@ export function ModelSearchableSelect({
           {t('settings:modelSelect.discoveryNotAvailable')}
         </p>
       )}
-      {error && models.length === 0 && (
+      {error && (
         <p className="text-sm text-destructive mt-1">{error}</p>
       )}
     </div>
