@@ -1,0 +1,27 @@
+- generic [ref=e8]:
+  - banner [ref=e9]:
+    - text: Log in to
+    - text: Chat with Kimi for Free
+  - generic [ref=e10]:
+    - generic [ref=e13] [cursor=pointer]: Continue with Google
+    - generic [ref=e15]: OR
+    - generic [ref=e17]:
+      - heading "Log in with phone number" [level=1] [ref=e18]
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - textbox "+86" [ref=e21]
+          - generic: "+86"
+          - img
+        - textbox "Phone number" [active] [ref=e22]
+      - generic [ref=e23]:
+        - textbox "Verification code" [ref=e24]
+        - button "Send Code" [disabled] [ref=e25]
+      - button "Log In" [ref=e26] [cursor=pointer]
+    - generic [ref=e28] [cursor=pointer]:
+      - paragraph [ref=e29]: Agree to
+      - paragraph [ref=e30]:
+        - link "Terms of Service" [ref=e31]:
+          - /url: /user/agreement/modelUse?version=v2
+        - text: and
+        - link "Privacy Policy" [ref=e32]:
+          - /url: /user/agreement/userPrivacy?version=v2
