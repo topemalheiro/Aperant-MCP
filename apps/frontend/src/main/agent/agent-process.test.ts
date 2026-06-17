@@ -74,13 +74,23 @@ vi.mock('../claude-profile-manager', () => ({
     ensureProfileDir: vi.fn(),
     readProfile: vi.fn(),
     writeProfile: vi.fn(),
-    deleteProfile: vi.fn()
+    deleteProfile: vi.fn(),
+    getAutoSwitchSettings: vi.fn(() => ({ defaultProviderId: undefined })),
+    getBestAvailableProfile: vi.fn(() => null),
+    setActiveProfile: vi.fn()
   }))
 }));
 
 // Mock dependencies
 vi.mock('../services/profile', () => ({
-  getAPIProfileEnv: vi.fn()
+  getAPIProfileEnv: vi.fn(),
+  getAPIProfileEnvById: vi.fn(() => Promise.resolve({}))
+}));
+
+// Mock provider account service so provider resolution falls back to legacy API profile flow
+vi.mock('../services/provider-account-service', () => ({
+  getProviderAccountState: vi.fn(() => Promise.resolve({ accounts: [], globalPriorityOrder: [] })),
+  getProviderAccountById: vi.fn(() => Promise.resolve(null))
 }));
 
 vi.mock('../rate-limit-detector', () => ({
