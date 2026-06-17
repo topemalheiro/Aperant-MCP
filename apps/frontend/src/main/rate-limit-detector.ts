@@ -478,6 +478,16 @@ export function getBestAvailableProfileEnv(): BestProfileEnvResult {
   const profileManager = getClaudeProfileManager();
   const activeProfile = profileManager.getActiveProfile();
 
+  if (!activeProfile) {
+    console.warn('[RateLimitDetector] getBestAvailableProfileEnv() called with no Claude profiles');
+    return {
+      env: {},
+      profileId: '',
+      profileName: 'No Claude profile',
+      wasSwapped: false,
+    };
+  }
+
   debugLog('[RateLimitDetector] getBestAvailableProfileEnv() called:', {
     activeProfileId: activeProfile.id,
     activeProfileName: activeProfile.name,

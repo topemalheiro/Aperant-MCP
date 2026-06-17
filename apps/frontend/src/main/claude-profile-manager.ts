@@ -400,7 +400,7 @@ export class ClaudeProfileManager {
     // If we deleted the active profile, switch to the new default or clear it
     if (this.data.activeProfileId === profileId) {
       const defaultProfile = remainingProfiles.find(p => p.isDefault);
-      this.data.activeProfileId = defaultProfile?.id || remainingProfiles[0]?.id || null;
+      this.data.activeProfileId = defaultProfile?.id || remainingProfiles[0]?.id || '';
     }
 
     this.save();
