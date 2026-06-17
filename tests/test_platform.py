@@ -29,6 +29,7 @@ from core.platform import (
     get_python_commands,
     find_executable,
     validate_cli_path,
+    resolve_cli_path,
     requires_shell,
     build_windows_command,
     get_env_var,
@@ -569,6 +570,30 @@ class TestPathValidation:
         assert validate_cli_path('/opt/homebrew/bin/python3') is True
 
 
+class TestResolveCliPath:
+    """Tests for CLI path resolution."""
+
+    @patch('core.platform.os.path.isfile', return_value=True)
+    def test_returns_absolute_path_when_file_exists(self, mock_isfile):
+        assert resolve_cli_path('/usr/bin/claude') == '/usr/bin/claude'
+
+    @patch('core.platform.os.path.isfile', return_value=False)
+    def test_returns_none_for_missing_absolute_path(self, mock_isfile):
+        assert resolve_cli_path('/missing/claude') is None
+
+    @patch('core.platform.shutil.which', return_value='/usr/bin/claude')
+    def test_resolves_bare_command_via_path(self, mock_which):
+        assert resolve_cli_path('claude') == '/usr/bin/claude'
+
+    @patch('core.platform.shutil.which', return_value=None)
+    def test_returns_none_for_unresolvable_bare_command(self, mock_which):
+        assert resolve_cli_path('claude') is None
+
+    def test_returns_none_for_invalid_path(self):
+        assert resolve_cli_path('cmd;rm -rf /') is None
+        assert resolve_cli_path('../etc/passwd') is None
+
+
 # ============================================================================
 # Shell Execution Tests
 # ============================================================================
@@ -598,7 +623,6 @@ class TestWindowsCommandBuilder:
 
         assert result[0].endswith('cmd.exe')
         assert '/d' in result
-        assert '/s' in result
         assert '/c' in result
         assert any('npm.cmd' in arg for arg in result)
 

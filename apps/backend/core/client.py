@@ -24,7 +24,7 @@ from typing import Any
 from core.fast_mode import ensure_fast_mode_in_user_settings
 from core.platform import (
     is_windows,
-    validate_cli_path,
+    resolve_cli_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -937,15 +937,16 @@ def create_client(
     # Optional: Allow CLI path override via environment variable
     # The SDK bundles its own CLI, but users can override if needed
     env_cli_path = os.environ.get("CLAUDE_CLI_PATH")
-    if env_cli_path and validate_cli_path(env_cli_path):
-        options_kwargs["cli_path"] = env_cli_path
+    resolved_cli_path = resolve_cli_path(env_cli_path) if env_cli_path else None
+    if resolved_cli_path:
+        options_kwargs["cli_path"] = resolved_cli_path
         logger.info(
-            f"Using CLAUDE_CLI_PATH override: {env_cli_path}, "
-            f"exists={os.path.exists(env_cli_path)}"
+            f"Using CLAUDE_CLI_PATH override: {resolved_cli_path} "
+            f"(raw={env_cli_path!r})"
         )
     else:
         logger.info(
-            "CLAUDE_CLI_PATH not set or invalid (value=%r), "
+            "CLAUDE_CLI_PATH not set or cannot be resolved (value=%r), "
             "SDK will auto-discover bundled CLI",
             env_cli_path,
         )

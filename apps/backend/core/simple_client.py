@@ -33,7 +33,7 @@ from core.auth import (
 )
 from core.codex_cli_client import CodexCLIClient
 from core.fast_mode import ensure_fast_mode_in_user_settings
-from core.platform import validate_cli_path
+from core.platform import resolve_cli_path
 from phase_config import get_thinking_budget
 
 logger = logging.getLogger(__name__)
@@ -152,8 +152,9 @@ def create_simple_client(
 
     # Optional: Allow CLI path override via environment variable
     env_cli_path = os.environ.get("CLAUDE_CLI_PATH")
-    if env_cli_path and validate_cli_path(env_cli_path):
-        options_kwargs["cli_path"] = env_cli_path
-        logger.info(f"Using CLAUDE_CLI_PATH override: {env_cli_path}")
+    resolved_cli_path = resolve_cli_path(env_cli_path) if env_cli_path else None
+    if resolved_cli_path:
+        options_kwargs["cli_path"] = resolved_cli_path
+        logger.info(f"Using CLAUDE_CLI_PATH override: {resolved_cli_path} (raw={env_cli_path!r})")
 
     return ClaudeSDKClient(options=ClaudeAgentOptions(**options_kwargs))

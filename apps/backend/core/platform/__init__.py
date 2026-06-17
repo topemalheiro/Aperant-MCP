@@ -405,6 +405,36 @@ def validate_cli_path(cli_path: str) -> bool:
     return True
 
 
+def resolve_cli_path(cli_path: str) -> str | None:
+    """
+    Resolve a CLI path to an absolute executable path.
+
+    Validates the path for security, then resolves it to an actual executable.
+    Absolute paths are returned only if the file exists. Relative paths and
+    bare command names are looked up via PATH. Returns None when the path is
+    invalid, missing, or cannot be found, allowing callers to fall back to
+    auto-discovery (e.g., the Claude Agent SDK's bundled CLI).
+
+    Args:
+        cli_path: Path or command name to resolve
+
+    Returns:
+        Absolute path to the executable, or None if it cannot be resolved
+    """
+    if not cli_path or not validate_cli_path(cli_path):
+        return None
+
+    if os.path.isabs(cli_path):
+        return cli_path if os.path.isfile(cli_path) else None
+
+    # Bare command name or relative path: search PATH
+    resolved = shutil.which(cli_path)
+    if resolved:
+        return resolved
+
+    return None
+
+
 # ============================================================================
 # Shell Execution
 # ============================================================================
