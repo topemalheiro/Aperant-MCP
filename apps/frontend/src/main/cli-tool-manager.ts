@@ -345,6 +345,17 @@ class CLIToolManager {
   getClaudeCliPathForSdk(): string | null {
     const claudePath = this.getToolPath('claude');
 
+    // If detection only produced the bare command name, don't pass it to the SDK.
+    // A non-absolute path disables the SDK's own bundled CLI discovery and causes
+    // "Claude Code not found at: claude" on platforms without a system install.
+    if (!path.isAbsolute(claudePath)) {
+      console.warn(
+        `[CLI Tools] Claude CLI path is not absolute ("${claudePath}"), ` +
+        'letting SDK auto-discover bundled CLI'
+      );
+      return null;
+    }
+
     // On Windows, .cmd files cannot be executed by anyio.open_process() / asyncio.create_subprocess_exec().
     // Try to find the SDK's bundled claude.exe instead.
     if (isWindows() && claudePath.toLowerCase().endsWith('.cmd')) {
@@ -1264,6 +1275,17 @@ class CLIToolManager {
    */
   async getClaudeCliPathForSdkAsync(): Promise<string | null> {
     const claudePath = await this.getToolPathAsync('claude');
+
+    // If detection only produced the bare command name, don't pass it to the SDK.
+    // A non-absolute path disables the SDK's own bundled CLI discovery and causes
+    // "Claude Code not found at: claude" on platforms without a system install.
+    if (!path.isAbsolute(claudePath)) {
+      console.warn(
+        `[CLI Tools] Claude CLI path is not absolute ("${claudePath}"), ` +
+        'letting SDK auto-discover bundled CLI'
+      );
+      return null;
+    }
 
     // On Windows, .cmd files cannot be executed by anyio.open_process() / asyncio.create_subprocess_exec().
     // Try to find the SDK's bundled claude.exe instead.
