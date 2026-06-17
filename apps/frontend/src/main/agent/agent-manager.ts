@@ -11,6 +11,7 @@ import { getOperationRegistry } from '../claude-profile/operation-registry';
 import { getAPIProfileEnv, getAPIProfileEnvById } from '../services/profile';
 import { getProviderAccountById, getProviderAccountState } from '../services/provider-account-service';
 import { getCodexAuthState } from '../codex-auth/codex-oauth';
+import { getKimiAuthState } from '../kimi-auth/kimi-oauth';
 import {
   SpecCreationMetadata,
   TaskExecutionOptions,
@@ -213,6 +214,20 @@ export class AgentManager extends EventEmitter {
         'error',
         taskId,
         'Claude authentication required. Please authenticate the selected Claude account in Settings > Accounts before starting tasks.'
+      );
+      return false;
+    }
+
+    if (providerAccount?.provider === 'kimi') {
+      const authState = await getKimiAuthState(providerAccount.id);
+      if (authState.isAuthenticated) {
+        return true;
+      }
+
+      this.emit(
+        'error',
+        taskId,
+        'Kimi Code authentication required. Please authenticate the selected Kimi account in Settings > Accounts before starting tasks.'
       );
       return false;
     }

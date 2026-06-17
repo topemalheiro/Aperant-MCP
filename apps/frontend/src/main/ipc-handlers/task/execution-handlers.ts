@@ -24,6 +24,10 @@ import { readSettingsFile } from '../../settings-utils';
 import { getIsolatedGitEnv, detectWorktreeBranch } from '../../utils/git-isolation';
 import { normalizePathForGit } from '../../platform';
 import { cleanupWorktree } from '../../utils/worktree-cleanup';
+import { getProviderAccountState } from '../../services/provider-account-service';
+import { getKimiAuthState } from '../../kimi-auth/kimi-oauth';
+import { getCodexAuthState } from '../../codex-auth/codex-oauth';
+import { getAPIProfileEnvById } from '../../services/profile';
 
 /**
  * Safe file read that handles missing files without TOCTOU issues.
@@ -58,6 +62,50 @@ function checkSubtasksCompletion(plan: Record<string, unknown> | null): {
   const allCompleted = totalCount > 0 && completedCount === totalCount;
 
   return { allSubtasks, completedCount, totalCount, allCompleted };
+}
+
+/**
+ * Check whether the currently active provider account is authenticated.
+ * Supports Claude (legacy), OpenAI Codex, Kimi Code, and custom API endpoints.
+ */
+async function hasActiveProviderAuth(profileManager: ClaudeProfileManager): Promise<boolean> {
+  try {
+    const { accounts, globalPriorityOrder } = await getProviderAccountState();
+    const autoSwitchSettings = profileManager.getAutoSwitchSettings();
+
+    const activeAccount = accounts.find((account) => account.id === autoSwitchSettings.defaultProviderId)
+      ?? globalPriorityOrder
+        .map((id) => accounts.find((account) => account.id === id))
+        .find((account): account is typeof account & { id: string } => !!account);
+
+    if (!activeAccount) {
+      return profileManager.hasValidAuth();
+    }
+
+    if (activeAccount.provider === 'anthropic') {
+      return profileManager.hasValidAuth();
+    }
+
+    if (activeAccount.provider === 'openai') {
+      const state = await getCodexAuthState(activeAccount.id);
+      return state.isAuthenticated;
+    }
+
+    if (activeAccount.provider === 'kimi') {
+      const state = await getKimiAuthState(activeAccount.id);
+      return state.isAuthenticated;
+    }
+
+    if (activeAccount.provider === 'openai-compatible' && activeAccount.apiProfileId) {
+      const env = await getAPIProfileEnvById(activeAccount.apiProfileId);
+      return !!env.ANTHROPIC_AUTH_TOKEN;
+    }
+
+    return profileManager.hasValidAuth();
+  } catch (error) {
+    console.warn('[hasActiveProviderAuth] Failed to determine provider auth:', error);
+    return profileManager.hasValidAuth();
+  }
 }
 
 /**
@@ -151,13 +199,13 @@ export function registerTaskExecutionHandlers(
         return;
       }
 
-      // Check authentication - Claude requires valid auth to run tasks
-      if (!profileManager.hasValidAuth()) {
+      // Check authentication for the active provider account
+      if (!(await hasActiveProviderAuth(profileManager))) {
         console.warn('[TASK_START] No valid authentication for active profile');
         mainWindow.webContents.send(
           IPC_CHANNELS.TASK_ERROR,
           taskId,
-          'Claude authentication required. Please go to Settings > Claude Profiles and authenticate your account, or set an OAuth token.'
+          'Authentication required. Please go to Settings > Accounts and authenticate your active provider account.'
         );
         return;
       }
@@ -690,16 +738,16 @@ export function registerTaskExecutionHandlers(
             return { success: false, error: initResult.error };
           }
           const profileManager = initResult.profileManager;
-          if (!profileManager.hasValidAuth()) {
+          if (!(await hasActiveProviderAuth(profileManager))) {
             console.warn('[TASK_UPDATE_STATUS] No valid authentication for active profile');
             if (mainWindow) {
               mainWindow.webContents.send(
                 IPC_CHANNELS.TASK_ERROR,
                 taskId,
-                'Claude authentication required. Please go to Settings > Claude Profiles and authenticate your account, or set an OAuth token.'
+                'Authentication required. Please go to Settings > Accounts and authenticate your active provider account.'
               );
             }
-            return { success: false, error: 'Claude authentication required' };
+            return { success: false, error: 'Authentication required' };
           }
 
           console.warn('[TASK_UPDATE_STATUS] Auto-starting task:', taskId);
@@ -1100,7 +1148,7 @@ export function registerTaskExecutionHandlers(
             };
           }
           const profileManager = initResult.profileManager;
-          if (!profileManager.hasValidAuth()) {
+          if (!(await hasActiveProviderAuth(profileManager))) {
             console.warn('[Recovery] Auth check failed, cannot auto-restart task');
             // Recovery succeeded but we can't restart without auth
             return {
@@ -1109,7 +1157,7 @@ export function registerTaskExecutionHandlers(
                 taskId,
                 recovered: true,
                 newStatus,
-                message: 'Task recovered but cannot restart: Claude authentication required. Please go to Settings > Claude Profiles and authenticate your account.',
+                message: 'Task recovered but cannot restart: authentication required. Please go to Settings > Accounts and authenticate your active provider account.',
                 autoRestarted: false
               }
             };
