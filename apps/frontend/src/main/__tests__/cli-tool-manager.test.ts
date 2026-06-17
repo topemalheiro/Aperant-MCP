@@ -13,7 +13,8 @@ import {
   clearToolCache,
   getClaudeDetectionPaths,
   sortNvmVersionDirs,
-  buildClaudeDetectionResult
+  buildClaudeDetectionResult,
+  getClaudeCliPathForSdk
 } from '../cli-tool-manager';
 import {
   findWindowsExecutableViaWhere,
@@ -440,6 +441,44 @@ describe('cli-tool-manager - Claude CLI NVM detection', () => {
 /**
  * Unit tests for helper functions
  */
+describe('cli-tool-manager - getClaudeCliPathForSdk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process, 'platform', {
+      value: 'linux',
+      writable: true
+    });
+  });
+
+  afterEach(() => {
+    clearToolCache();
+  });
+
+  it('should return an absolute Claude path when detection finds one', () => {
+    vi.mocked(os.homedir).mockReturnValue('/home/user');
+    vi.mocked(findExecutable).mockReturnValue('/usr/local/bin/claude');
+    vi.mocked(existsSync).mockImplementation((filePath) => {
+      const pathStr = String(filePath);
+      return pathStr === '/usr/local/bin/claude';
+    });
+    vi.mocked(execFileSync).mockReturnValue('claude-code version 1.0.0\n');
+
+    const result = getClaudeCliPathForSdk();
+
+    expect(result).toBe('/usr/local/bin/claude');
+  });
+
+  it('should return null when Claude is not found so the SDK can use its bundled CLI', () => {
+    vi.mocked(os.homedir).mockReturnValue('/home/user');
+    vi.mocked(findExecutable).mockReturnValue(null);
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = getClaudeCliPathForSdk();
+
+    expect(result).toBeNull();
+  });
+});
+
 describe('cli-tool-manager - Helper Functions', () => {
   describe('getClaudeDetectionPaths', () => {
     it('should return homebrew paths on macOS', () => {
