@@ -764,6 +764,14 @@ export async function sendMessageToWindow(
   const route = targetWindow.backgroundRoute ?? 'foreground';
   const cdpPort = targetWindow.cdpPort || getCdpPort();
 
+  // Kimi Code: and Kilo Code: VS Code: extensions use /skill:<name> to invoke skills.
+  // Auto-prefix RDR prompts with the recovery skill so the receiving agent knows
+  // to run the Auto-Codex RDR workflow without the user having to type it.
+  if ((targetWindow.activeAgent === 'kimi-code' || targetWindow.activeAgent === 'kilo-code') && !message.startsWith('/skill:')) {
+    message = `/skill:auto-claude-manager-rdr ${message}`;
+    console.log('[LinuxWindowManager] Prefixed message with Kimi/Kilo skill trigger:', message);
+  }
+
   console.log(
     `[LinuxWindowManager] Found window: "${targetWindow.title}" (PID: ${targetWindow.processId}, route: ${route})`
   );
