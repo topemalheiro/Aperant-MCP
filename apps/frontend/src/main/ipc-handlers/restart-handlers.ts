@@ -2,12 +2,15 @@ import { ipcMain, app, BrowserWindow } from 'electron';
 import { spawn } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { IPC_CHANNELS } from '../../shared/constants/ipc';
 import type { IPCResult } from '../../shared/types';
 import type { AgentManager } from '../agent/agent-manager';
 import { readSettingsFile } from '../settings-utils';
 import { projectStore } from '../project-store';
 import { performGracefulRestart, restoreAppState } from './graceful-restart-handler';
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 const RESTART_STATE_FILE = path.join(
   app.getPath('userData'),
@@ -131,7 +134,7 @@ export async function buildAndRestart(buildCommand: string): Promise<IPCResult<v
 
       // Execute build
       const buildProcess = spawn(cmd, args, {
-        cwd: path.join(__dirname, '../../../'), // Frontend root
+        cwd: path.join(currentDir, '../../../'), // Frontend root
         stdio: 'pipe',
         shell: true // Enable shell for cross-platform compatibility
       });
@@ -180,7 +183,7 @@ export async function buildAndRestart(buildCommand: string): Promise<IPCResult<v
       // Spawn the reopen command as a detached process
       // This ensures it survives after we quit
       const reopenProcess = spawn(reopenCommand, [], {
-        cwd: path.join(__dirname, '../../../'),
+        cwd: path.join(currentDir, '../../../'),
         shell: true,
         detached: true,
         stdio: 'ignore'

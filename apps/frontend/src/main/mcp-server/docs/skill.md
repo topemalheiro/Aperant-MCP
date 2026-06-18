@@ -223,12 +223,25 @@ Task log entries showing "You've hit your limit" are **HISTORICAL** — written 
 
 ### MCP Tools Quick Reference
 
+- **open_project(path)** → Register a project folder and get its `projectId`
+- **create_task(projectId, description, title?, options?)** → Create one task
+- **start_batch(projectId, tasks, options?)** → Create multiple tasks at once
+- **list_tasks(projectId, status?)** → List tasks with their current status
+- **get_task_status(projectId, taskId)** → Detailed progress and subtask state
+- **start_task(projectId, taskId)** → Set a task to `start_requested`
+- **wait_for_human_review(projectId, taskIds, onComplete?)** → Wait and run a callback
 - **get_rdr_batches(projectId)** → Get all tasks needing intervention
 - **process_rdr_batch(projectId, batchType, fixes)** → Batch process tasks (P1, P4)
 - **recover_stuck_task(projectId, taskId, autoRestart?)** → Recover stuck tasks (P2)
 - **submit_task_fix_request(projectId, taskId, feedback)** → Submit fix request (P3)
-- **get_task_error_details(projectId, taskId)** → Get error logs
+- **get_task_error_details(projectId, taskId)** → Get error logs and QA report
+- **get_task_logs(projectId, taskId)** → Get phase-specific logs
 - **defer_task(projectId, taskId, reason?)** → Park broken task (P6C)
+- **assign_window(projectId, provider?)** → Target a VS Code: window for RDR messages
+- **associate_project_desktop(projectId, desktopName?)** → Align desktop/window state
+- **set_rdr_enabled(projectId, enabled)** → Toggle RDR monitoring for a project
+- **set_auto_resume_after_rate_limit(projectId, enabled)** → Toggle rate-limit auto-resume
+- **trigger_auto_restart(reason, buildCommand?)** → Build and restart Aperant
 
 ### Critical Recovery Rules
 

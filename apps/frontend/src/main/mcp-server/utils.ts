@@ -9,11 +9,13 @@ import path from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import type { Dirent } from 'fs';
 import { spawn } from 'child_process';
+import { v4 as uuidv4 } from 'uuid';
 import { projectStore } from '../project-store';
 import { titleGenerator } from '../title-generator';
 import { AUTO_BUILD_PATHS, getSpecsDir } from '../../shared/constants';
 import { PROVIDER_REGISTRY } from '../../shared/constants/providers';
-import type { Project, ProviderAccount, Task, TaskMetadata, TaskStatus } from '../../shared/types';
+import type { Project, ProviderAccount, TaskMetadata, TaskStatus } from '../../shared/types';
+import type { PhaseModelConfig, PhaseThinkingConfig } from '../../shared/types/settings';
 import { getProviderAccountState } from '../services/provider-account-service';
 import type {
   TaskOptions,
@@ -21,8 +23,6 @@ import type {
   TaskSummary,
   TaskStatusDetail,
   MCPResult,
-  PhaseModels,
-  PhaseThinking
 } from './types';
 
 function normalizeProviderLookup(value: string): string {
@@ -136,7 +136,7 @@ export function toTaskMetadata(options?: TaskOptions): TaskMetadata {
       planning: options.phaseModels.planning,
       coding: options.phaseModels.coding,
       qa: options.phaseModels.qaReview,
-    };
+    } as PhaseModelConfig;
   }
 
   // Convert phase thinking
@@ -146,14 +146,18 @@ export function toTaskMetadata(options?: TaskOptions): TaskMetadata {
       planning: options.phaseThinking.planning,
       coding: options.phaseThinking.coding,
       qa: options.phaseThinking.qaReview,
-    };
+    } as PhaseThinkingConfig;
   }
 
   // Convert referenced files
   if (options.referencedFiles && options.referencedFiles.length > 0) {
-    metadata.referencedFiles = options.referencedFiles.map(filePath => ({
+    const now = new Date();
+    metadata.referencedFiles = options.referencedFiles.map((filePath) => ({
+      id: uuidv4(),
       path: filePath,
-      type: 'file' as const,
+      name: path.basename(filePath),
+      isDirectory: false,
+      addedAt: now,
     }));
   }
 
@@ -316,13 +320,9 @@ export function listTasks(
     }
 
     const summaries: TaskSummary[] = filteredTasks.map(task => ({
-      taskId: task.specId,
+      ...task,
+      taskId: task.specId, // expose specId as taskId for MCP clients
       projectPath: project.path, // ADD THIS - fixes MCP tools that need to write files
-      title: task.title,
-      description: task.description || '',
-      status: task.status,
-      createdAt: task.createdAt || new Date().toISOString(),
-      updatedAt: task.updatedAt,
     }));
 
     return { success: true, data: summaries };
@@ -353,15 +353,14 @@ export function getTaskStatus(
       return { success: false, error: `Task not found: ${taskId}` };
     }
 
+    const completedSubtasks = task.subtasks?.filter((s) => s.status === 'completed').length ?? 0;
     const detail: TaskStatusDetail = {
+      ...task,
       taskId: task.specId,
-      title: task.title,
-      status: task.status,
-      phase: task.currentPhase,
-      progress: task.progress,
-      subtaskCount: task.subtaskCount,
-      completedSubtasks: task.completedSubtasks,
-      error: task.error,
+      phase: task.executionProgress?.phase,
+      progress: task.executionProgress?.overallProgress,
+      subtaskCount: task.subtasks?.length ?? 0,
+      completedSubtasks,
       reviewReason: task.reviewReason,
     };
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # MCP Server Launcher with Electron Mocking
 
-# Mock Electron before starting
-export NODE_OPTIONS="--require $(dirname "$0")/mock-electron.js"
+# Resolve the directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Run tsx with the MCP server
-cd "$(dirname "$0")/../../../.."
-npx --yes tsx apps/frontend/src/main/mcp-server/index.ts
+# Run tsx with the ESM register-loader so Electron imports are mocked and
+# TypeScript .js extension imports resolve correctly.
+cd "$(dirname "$SCRIPT_DIR")/../../../.." || exit 1
+npx --yes tsx --import "${SCRIPT_DIR}/register-loader.mjs" "${SCRIPT_DIR}/index.ts"

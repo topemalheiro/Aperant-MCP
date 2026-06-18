@@ -28,10 +28,15 @@ You can make the master LLM create batches of auto-started tasks (use start_requ
 A full MCP (Model Context Protocol) server that lets Claude Code interact with Auto-Claude directly. Create, manage, monitor, and recover tasks programmatically instead of through the UI.
 
 
-**15 MCP Tools:**
+**21 MCP Tools:**
 
 | Tool                               | Purpose                                                        |
 | ---------------------------------- | -------------------------------------------------------------- |
+| `assign_window`                  | Register a VS Code: window as the master LLM target for RDR    |
+| `associate_project_desktop`      | Associate a project with the current virtual desktop           |
+| `open_project`                   | Open/register a project folder for MCP task management         |
+| `set_auto_resume_after_rate_limit` | Toggle project-level auto-resume after rate limit              |
+| `set_rdr_enabled`                | Toggle project-level RDR monitoring                            |
 | `create_task`                    | Create a single task with full configuration                   |
 | `list_tasks`                     | List all tasks, filterable by status                           |
 | `get_task_status`                | Detailed status including phase/subtask progress               |
@@ -47,6 +52,7 @@ A full MCP (Model Context Protocol) server that lets Claude Code interact with A
 | `process_rdr_batch`              | Process a batch of tasks through the recovery system           |
 | `trigger_auto_restart`           | Restart app with build on crash/error detection                |
 | `test_force_recovery`            | Force tasks into recovery mode for testing                     |
+| `defer_task`                     | Park a broken task on the Queue board with RDR disabled        |
 
 ### RDR System (Recover, Debug, Resend)
 

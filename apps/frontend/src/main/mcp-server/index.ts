@@ -79,7 +79,7 @@ import type {
 // Zod Schemas for Tool Parameters
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ModelTypeSchema = z.enum(['haiku', 'sonnet', 'opus']);
+const ModelTypeSchema = z.enum(['haiku', 'sonnet', 'opus', 'opus-1m', 'opus-4.5']);
 
 const TaskCategorySchema = z.enum([
   'feature',
@@ -99,6 +99,7 @@ const TaskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
 
 const TaskStatusSchema = z.enum([
   'backlog',
+  'queue',
   'in_progress',
   'ai_review',
   'human_review',
@@ -115,10 +116,10 @@ const PhaseModelsSchema = z.object({
 }).optional();
 
 const PhaseThinkingSchema = z.object({
-  specCreation: z.number().optional(),
-  planning: z.number().optional(),
-  coding: z.number().optional(),
-  qaReview: z.number().optional()
+  specCreation: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+  planning: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+  coding: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+  qaReview: z.enum(['low', 'medium', 'high', 'xhigh']).optional()
 }).optional();
 
 const TaskOptionsSchema = z.object({
@@ -1877,10 +1878,36 @@ server.tool(
             action = 'json_already_valid';
             priority = 1;
           } catch (jsonError) {
-            // JSON parse failed - try to fix it
-            // For now, just report the error and let the AI handle it
-            // A future enhancement could attempt auto-fix (remove trailing commas, fix quotes, etc.)
+            // JSON parse failed - auto-rebuild a minimal valid plan (P4 JSON recovery)
             const errorMsg = jsonError instanceof Error ? jsonError.message : String(jsonError);
+            const recoveryPlan = {
+              feature: fix.taskId,
+              description: `Task recovered by RDR system after JSON parse error: ${errorMsg}`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              status: 'start_requested',
+              phases: []
+            };
+            const recoveryJson = JSON.stringify(recoveryPlan, null, 2);
+
+            // Write recovery plan to main project
+            writeFileSync(planPath, recoveryJson);
+
+            // Also write to worktree if one exists
+            const worktreePlanPath = path.join(
+              resolvedProjectPath, '.auto-claude', 'worktrees', 'tasks', fix.taskId,
+              '.auto-claude', 'specs', fix.taskId, 'implementation_plan.json'
+            );
+            if (existsSync(path.dirname(worktreePlanPath))) {
+              try {
+                writeFileSync(worktreePlanPath, recoveryJson);
+                console.log(`[MCP] Wrote recovery implementation_plan.json to worktree for ${fix.taskId}`);
+              } catch (wtErr) {
+                console.warn(`[MCP] Failed to write worktree recovery plan for ${fix.taskId}:`, wtErr);
+              }
+            }
+
+            // Leave a human-readable note for the agent
             const feedbackContent = `# Fix Request (RDR Batch: json_error)
 
 **JSON Parse Error Detected:**
@@ -1888,18 +1915,18 @@ server.tool(
 ${errorMsg}
 \`\`\`
 
-**Action Required:**
-1. Fix the JSON syntax error in implementation_plan.json
-2. Ensure all JSON is valid before continuing
+**Auto-Recovery Applied:**
+The corrupted \`implementation_plan.json\` was replaced with a minimal valid plan and the task status was set to \`start_requested\`. The file watcher will pick this up and restart the task automatically.
 
 ---
 Generated at: ${new Date().toISOString()}
-Source: RDR Batch Processing (Priority 3: Technical Blocker Fix)
+Source: RDR Batch Processing (Priority 4: JSON Auto-Fix)
 Batch Type: ${batchType}
 `;
             writeFileSync(fixRequestPath, feedbackContent);
             feedbackWrittenToMain = true;
-            action = 'json_fix_requested';
+            action = 'json_auto_fixed';
+            priority = 4;
           }
 
         } else if (batchType === 'incomplete') {
@@ -2131,9 +2158,10 @@ server.tool(
       const { app } = await import('electron');
       const path = await import('path');
 
-      const settings = readSettingsFile();
+      const settings = readSettingsFile() ?? {};
+      const autoRestart = settings.autoRestartOnFailure as { enabled?: boolean; buildCommand?: string } | undefined;
 
-      if (!settings.autoRestartOnFailure?.enabled) {
+      if (!autoRestart?.enabled) {
         return {
           content: [{
             type: 'text' as const,
@@ -2157,7 +2185,7 @@ server.tool(
 
       // Import and call buildAndRestart
       const { buildAndRestart } = await import('../ipc-handlers/restart-handlers.js');
-      const cmd = buildCommand || settings.autoRestartOnFailure.buildCommand || 'npm run build';
+      const cmd = buildCommand || autoRestart.buildCommand || 'npm run build';
 
       // Note: Task state will be saved by checkAndHandleRestart when app restarts and detects marker file
       console.log('[MCP] Triggering build and restart with command:', cmd);

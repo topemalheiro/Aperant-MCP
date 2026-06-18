@@ -2,43 +2,46 @@
  * Auto-Claude MCP Server Types
  *
  * Type definitions for MCP tool parameters and responses.
- * These types mirror the TaskMetadata interface from the frontend
- * but are tailored for external MCP clients.
+ * These reuse the shared task types where possible so the MCP layer
+ * stays in sync with the rest of the app.
  */
 
-// Model types matching the frontend
-export type ModelType = 'haiku' | 'sonnet' | 'opus';
+import type {
+  ExecutionProgress,
+  ModelType,
+  QAReport,
+  ReferencedFile,
+  ReviewReason,
+  Subtask,
+  Task as SharedTask,
+  TaskCategory,
+  TaskComplexity,
+  TaskExitReason,
+  TaskPriority,
+  TaskRateLimitInfo,
+  TaskStatus,
+} from '../../shared/types/task';
+import type { ThinkingLevel } from '../../shared/types/settings';
 
-// Task categories
-export type TaskCategory =
-  | 'feature'
-  | 'bug_fix'
-  | 'refactoring'
-  | 'documentation'
-  | 'security'
-  | 'performance'
-  | 'ui_ux'
-  | 'infrastructure'
-  | 'testing';
-
-// Task complexity levels
-export type TaskComplexity = 'trivial' | 'small' | 'medium' | 'large' | 'complex';
-
-// Task priority levels
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-// Task status (from Kanban board)
-export type TaskStatus =
-  | 'backlog'
-  | 'in_progress'
-  | 'ai_review'
-  | 'human_review'
-  | 'pr_created'
-  | 'done'
-  | 'error';
+// Re-export shared types so consumers only need one import source
+export type {
+  ExecutionProgress,
+  ModelType,
+  QAReport,
+  ReferencedFile,
+  ReviewReason,
+  Subtask,
+  TaskCategory,
+  TaskComplexity,
+  TaskExitReason,
+  TaskPriority,
+  TaskRateLimitInfo,
+  TaskStatus,
+};
 
 /**
- * Per-phase model configuration
+ * Per-phase model configuration passed by MCP clients.
+ * Differs from the internal PhaseModelConfig only in key naming.
  */
 export interface PhaseModels {
   specCreation?: ModelType;
@@ -48,13 +51,13 @@ export interface PhaseModels {
 }
 
 /**
- * Per-phase thinking token configuration
+ * Per-phase thinking level configuration passed by MCP clients.
  */
 export interface PhaseThinking {
-  specCreation?: number;
-  planning?: number;
-  coding?: number;
-  qaReview?: number;
+  specCreation?: ThinkingLevel;
+  planning?: ThinkingLevel;
+  coding?: ThinkingLevel;
+  qaReview?: ThinkingLevel;
 }
 
 /**
@@ -189,32 +192,24 @@ export interface CreatedTask {
 }
 
 /**
- * Task summary for listing
+ * Task summary for listing.
+ * Mirrors the internal Task shape and adds the project path and a stable
+ * `taskId` alias so MCP clients can locate tasks on disk for file-based recovery.
  */
-export interface TaskSummary {
-  taskId: string;
-  projectPath: string; // Path to project directory - needed by MCP tools to write fix files
-  title: string;
-  description: string;
-  status: TaskStatus;
-  createdAt: string;
-  updatedAt?: string;
-}
+export type TaskSummary = SharedTask & { projectPath: string; taskId: string };
 
 /**
- * Detailed task status
+ * Detailed task status.
+ * Mirrors the internal Task shape and exposes the spec ID as `taskId`,
+ * plus a few computed convenience fields used by the MCP responses.
  */
-export interface TaskStatusDetail {
+export type TaskStatusDetail = SharedTask & {
   taskId: string;
-  title: string;
-  status: TaskStatus;
   phase?: string;
   progress?: number;
   subtaskCount?: number;
   completedSubtasks?: number;
-  error?: string;
-  reviewReason?: string;
-}
+};
 
 /**
  * Batch operation result
