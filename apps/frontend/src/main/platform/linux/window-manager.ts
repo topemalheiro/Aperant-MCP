@@ -647,6 +647,19 @@ export function findWindow(identifier: number | string): VSCodeWindow | undefine
   return findWindowByHandle(identifier) ?? findWindowByTitle(identifier);
 }
 
+function findWindowInList(
+  windows: VSCodeWindow[],
+  identifier: number | string
+): VSCodeWindow | undefined {
+  if (typeof identifier === 'number') {
+    return windows.find((w) => w.handle === identifier || w.processId === identifier || w.kdotoolHandle === identifier);
+  }
+  return (
+    windows.find((w) => w.handle === identifier || w.kdotoolHandle === identifier) ??
+    windows.find((w) => w.title.toLowerCase().includes(identifier.toLowerCase()))
+  );
+}
+
 export function isWindowValid(handle: number | string): boolean {
   const windows = getVSCodeWindowsSync();
   return windows.some((w) => w.handle === handle || w.kdotoolHandle === handle);
@@ -739,7 +752,7 @@ export async function sendMessageToWindow(
     return { success: false, error: 'No VS Code: windows found on Linux' };
   }
 
-  const targetWindow = findWindow(identifier);
+  const targetWindow = findWindowInList(windows, identifier);
   if (!targetWindow) {
     const availableTitles = windows.map((w) => w.title).join(', ');
     return {
@@ -962,7 +975,7 @@ export async function isClaudeCodeBusy(identifier: number | string): Promise<boo
     console.log('[LinuxWindowManager] Checking if AI agent is busy...');
 
     const windows = await getVSCodeWindows();
-    const targetWindow = findWindow(identifier);
+    const targetWindow = findWindowInList(windows, identifier);
 
     if (!targetWindow) {
       console.warn('[LinuxWindowManager] Window not found, assuming idle');
